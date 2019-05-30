@@ -26,8 +26,3 @@
 ##========================================================================== //
 
 emit_answer(tb_fused_multiply_add fused_multiply_add.sv fused_multiply_add.cpp)
-
-add_test(NAME tb_fused_multiply_add_0 COMMAND tb_fused_multiply_add --seed=1)
-add_test(NAME tb_fused_multiply_add_1 COMMAND tb_fused_multiply_add --seed=2)
-add_test(NAME tb_fused_multiply_add_2 COMMAND tb_fused_multiply_add --seed=3)
-add_test(NAME tb_fused_multiply_add_3 COMMAND tb_fused_multiply_add --seed=4)

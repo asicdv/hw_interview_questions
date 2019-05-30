@@ -26,9 +26,3 @@
 ##========================================================================== //
 
 emit_answer(tb_doubly_linked_list doubly_linked_list.sv doubly_linked_list.cpp)
-
-add_test(NAME tb_doubly_linked_list_0 COMMAND tb_doubly_linked_list --seed=1)
-add_test(NAME tb_doubly_linked_list_1 COMMAND tb_doubly_linked_list --seed=2)
-add_test(NAME tb_doubly_linked_list_2 COMMAND tb_doubly_linked_list --seed=3)
-add_test(NAME tb_doubly_linked_list_3 COMMAND tb_doubly_linked_list --seed=4)
-add_test(NAME tb_doubly_linked_list_4 COMMAND tb_doubly_linked_list --seed=5)

@@ -26,10 +26,3 @@
 ##========================================================================== //
 
 emit_answer(tb_fifo_multi_push fifo_multi_push.sv fifo_multi_push.cpp)
-
-add_test(NAME tb_fifo_multi_push_0 COMMAND tb_fifo_multi_push --seed=1)
-add_test(NAME tb_fifo_multi_push_1 COMMAND tb_fifo_multi_push --seed=2)
-add_test(NAME tb_fifo_multi_push_2 COMMAND tb_fifo_multi_push --seed=3)
-add_test(NAME tb_fifo_multi_push_3 COMMAND tb_fifo_multi_push --seed=4)
-add_test(NAME tb_fifo_multi_push_4 COMMAND tb_fifo_multi_push --seed=5)
-

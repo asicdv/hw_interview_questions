@@ -26,9 +26,3 @@
 ##========================================================================== ##
 
 emit_answer(tb_fifo_async fifo_async.sv fifo_async_tb.cpp)
-
-add_test(NAME tb_fifo_async_0 COMMAND tb_fifo_async --seed=1)
-add_test(NAME tb_fifo_async_1 COMMAND tb_fifo_async --seed=2)
-add_test(NAME tb_fifo_async_2 COMMAND tb_fifo_async --seed=3)
-add_test(NAME tb_fifo_async_3 COMMAND tb_fifo_async --seed=4)
-add_test(NAME tb_fifo_async_4 COMMAND tb_fifo_async --seed=5)

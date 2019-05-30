@@ -26,5 +26,3 @@
 ##========================================================================== //
 
 emit_answer(tb_one_or_two one_or_two.sv one_or_two.cpp)
-
-add_test(NAME tb_one_or_two_0 COMMAND tb_one_or_two --seed=1)

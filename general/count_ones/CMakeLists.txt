@@ -26,9 +26,3 @@
 ##========================================================================== //
 
 emit_answer(tb_count_ones count_ones.sv count_ones.cpp)
-
-add_test(NAME tb_count_ones_0 COMMAND tb_count_ones --seed=1)
-add_test(NAME tb_count_ones_1 COMMAND tb_count_ones --seed=2)
-add_test(NAME tb_count_ones_2 COMMAND tb_count_ones --seed=3)
-add_test(NAME tb_count_ones_3 COMMAND tb_count_ones --seed=4)
-add_test(NAME tb_count_ones_4 COMMAND tb_count_ones --seed=5)

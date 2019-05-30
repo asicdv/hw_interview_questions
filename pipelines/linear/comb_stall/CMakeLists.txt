@@ -27,5 +27,3 @@
 
 emit_answer(
   tb_comb_stall comb_stall.sv comb_stall.cpp)
-
-add_test(NAME tb_comb_stall_0 COMMAND tb_comb_stall --seed=1)

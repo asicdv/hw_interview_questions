@@ -26,5 +26,3 @@
 ##========================================================================== //
 
 emit_answer(tb_clk_div_by_3 clk_div_by_3.sv clk_div_by_3.cpp)
-
-add_test(NAME tb_clk_div_by_3_0 COMMAND tb_clk_div_by_3 --seed=1)

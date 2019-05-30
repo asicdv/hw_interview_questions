@@ -26,5 +26,3 @@
 ##========================================================================== //
 
 emit_answer(tb_vending_machine_dp vending_machine_dp.sv vending_machine_dp.cpp)
-
-add_test(NAME tb_vending_machine_dp COMMAND tb_vending_machine_dp --seed=1)

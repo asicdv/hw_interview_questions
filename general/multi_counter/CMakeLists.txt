@@ -26,9 +26,3 @@
 ##========================================================================== //
 
 emit_answer(tb_multi_counter multi_counter.sv multi_counter.cpp)
-
-add_test(NAME tb_multi_counter_0 COMMAND tb_multi_counter --seed=1)
-add_test(NAME tb_multi_counter_1 COMMAND tb_multi_counter --seed=2)
-add_test(NAME tb_multi_counter_2 COMMAND tb_multi_counter --seed=3)
-add_test(NAME tb_multi_counter_3 COMMAND tb_multi_counter --seed=4)
-add_test(NAME tb_multi_counter_4 COMMAND tb_multi_counter --seed=5)

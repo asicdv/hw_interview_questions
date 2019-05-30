@@ -26,5 +26,3 @@
 ##========================================================================== //
 
 emit_answer(tb_mcp_formulation mcp_formulation.sv mcp_formulation.cpp)
-  
-add_test(NAME tb_mcp_formulation_0 COMMAND tb_mcp_formulation_3 --seed=1)

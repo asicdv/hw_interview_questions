@@ -26,9 +26,3 @@
 ##========================================================================== //
 
 emit_answer(tb_detect_sequence detect_sequence.sv detect_sequence.cpp)
-
-add_test(NAME tb_detect_sequence_0 COMMAND tb_detect_sequence --seed=1)
-add_test(NAME tb_detect_sequence_1 COMMAND tb_detect_sequence --seed=2)
-add_test(NAME tb_detect_sequence_2 COMMAND tb_detect_sequence --seed=3)
-add_test(NAME tb_detect_sequence_3 COMMAND tb_detect_sequence --seed=4)
-add_test(NAME tb_detect_sequence_4 COMMAND tb_detect_sequence --seed=5)

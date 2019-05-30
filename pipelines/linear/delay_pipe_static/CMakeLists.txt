@@ -27,5 +27,3 @@
 
 emit_answer(
   tb_delay_pipe_static delay_pipe_static.sv delay_pipe_static.cpp)
-
-add_test(NAME tb_delay_pipe_static_0 COMMAND tb_delay_pipe_static --seed=1)

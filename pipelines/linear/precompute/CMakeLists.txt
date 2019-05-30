@@ -27,5 +27,3 @@
 
 emit_answer(
   tb_precompute precompute.sv precompute.cpp)
-
-add_test(NAME tb_precompute_0 COMMAND tb_precompute --seed=1)

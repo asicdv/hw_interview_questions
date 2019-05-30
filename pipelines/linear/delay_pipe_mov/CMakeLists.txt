@@ -27,5 +27,3 @@
 
 emit_answer(
   tb_delay_pipe_mov delay_pipe_mov.sv delay_pipe_mov.cpp)
-
-add_test(NAME tb_delay_pipe_mov_0 COMMAND tb_delay_pipe_mov --seed=1)

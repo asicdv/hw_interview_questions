@@ -27,8 +27,3 @@
 
 emit_answer(tb_ultra_wide_accumulator
   ultra_wide_accumulator.sv ultra_wide_accumulator.cpp)
-  
-add_test(NAME tb_ultra_wide_accumulator_0 COMMAND tb_ultra_wide_accumulator --seed=1)
-add_test(NAME tb_ultra_wide_accumulator_1 COMMAND tb_ultra_wide_accumulator --seed=2)
-add_test(NAME tb_ultra_wide_accumulator_2 COMMAND tb_ultra_wide_accumulator --seed=3)
-add_test(NAME tb_ultra_wide_accumulator_3 COMMAND tb_ultra_wide_accumulator --seed=4)

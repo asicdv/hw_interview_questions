@@ -27,5 +27,3 @@
 
 emit_answer(
   tb_double_buffer double_buffer.sv double_buffer.cpp)
-
-add_test(NAME tb_double_buffer_0 COMMAND tb_double_buffer --seed=1)

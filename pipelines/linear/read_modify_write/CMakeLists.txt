@@ -27,5 +27,3 @@
 
 emit_answer(
   tb_read_modify_write read_modify_write.sv read_modify_write.cpp)
-
-add_test(NAME tb_read_modify_write_0 COMMAND tb_read_modify_write --seed=1)

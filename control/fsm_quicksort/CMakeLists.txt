@@ -26,5 +26,3 @@
 ##========================================================================== //
 
 emit_answer(tb_fsm_quicksort fsm_quicksort.sv fsm_quicksort.cpp)
-
-add_test(NAME tb_fsm_quicksort_0 COMMAND tb_fsm_quicksort --seed=1)

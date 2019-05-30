@@ -26,9 +26,3 @@
 ##========================================================================== //
 
 emit_answer(tb_sorted_lists sorted_lists.sv sorted_lists.cpp)
-
-add_test(NAME tb_sorted_lists_0 COMMAND tb_sorted_lists --seed=1)
-add_test(NAME tb_sorted_lists_1 COMMAND tb_sorted_lists --seed=2)
-add_test(NAME tb_sorted_lists_2 COMMAND tb_sorted_lists --seed=3)
-add_test(NAME tb_sorted_lists_3 COMMAND tb_sorted_lists --seed=4)
-add_test(NAME tb_sorted_lists_4 COMMAND tb_sorted_lists --seed=5)

@@ -26,9 +26,3 @@
 ##========================================================================== //
 
 emit_answer(tb_count_zeros_32 count_zeros_32.sv count_zeros_32.cpp)
-
-add_test(NAME tb_count_zeros_32_0 COMMAND tb_count_zeros_32 --seed=1)
-add_test(NAME tb_count_zeros_32_1 COMMAND tb_count_zeros_32 --seed=2)
-add_test(NAME tb_count_zeros_32_2 COMMAND tb_count_zeros_32 --seed=3)
-add_test(NAME tb_count_zeros_32_3 COMMAND tb_count_zeros_32 --seed=4)
-add_test(NAME tb_count_zeros_32_4 COMMAND tb_count_zeros_32 --seed=5)

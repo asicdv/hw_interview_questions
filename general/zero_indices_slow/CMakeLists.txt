@@ -26,9 +26,3 @@
 ##========================================================================== //
 
 emit_answer(tb_zero_indices_slow zero_indices_slow.sv zero_indices_slow.cpp)
-
-add_test(NAME tb_zero_indices_slow_0 COMMAND tb_zero_indices_slow --seed=1)
-add_test(NAME tb_zero_indices_slow_1 COMMAND tb_zero_indices_slow --seed=2)
-add_test(NAME tb_zero_indices_slow_2 COMMAND tb_zero_indices_slow --seed=3)
-add_test(NAME tb_zero_indices_slow_3 COMMAND tb_zero_indices_slow --seed=4)
-add_test(NAME tb_zero_indices_slow_4 COMMAND tb_zero_indices_slow --seed=5)

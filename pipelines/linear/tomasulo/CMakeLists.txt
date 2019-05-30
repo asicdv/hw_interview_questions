@@ -27,5 +27,3 @@
 
 emit_answer(
   tb_tomasulo tomasulo.sv tomasulo.cpp)
-
-add_test(NAME tb_tomasulo_0 COMMAND tb_tomasulo --seed=1)

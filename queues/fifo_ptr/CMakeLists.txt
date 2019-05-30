@@ -27,9 +27,3 @@
 
 emit_answer(tb_fifo_ptr fifo_ptr.sv fifo_ptr.cpp)
 
-add_test(NAME tb_fifo_ptr_0 COMMAND tb_fifo_ptr --seed=1)
-add_test(NAME tb_fifo_ptr_1 COMMAND tb_fifo_ptr --seed=2)
-add_test(NAME tb_fifo_ptr_2 COMMAND tb_fifo_ptr --seed=3)
-add_test(NAME tb_fifo_ptr_3 COMMAND tb_fifo_ptr --seed=4)
-add_test(NAME tb_fifo_ptr_4 COMMAND tb_fifo_ptr --seed=5)
-

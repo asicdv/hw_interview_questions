@@ -26,9 +26,3 @@
 ##========================================================================== //
 
 emit_answer(tb_fibonacci fibonacci.sv fibonacci.cpp)
-
-add_test(NAME tb_fibonacci_0 COMMAND tb_fibonacci --seed=1)
-add_test(NAME tb_fibonacci_1 COMMAND tb_fibonacci --seed=2)
-add_test(NAME tb_fibonacci_2 COMMAND tb_fibonacci --seed=3)
-add_test(NAME tb_fibonacci_3 COMMAND tb_fibonacci --seed=4)
-add_test(NAME tb_fibonacci_4 COMMAND tb_fibonacci --seed=5)

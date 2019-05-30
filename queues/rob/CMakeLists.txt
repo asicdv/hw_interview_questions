@@ -26,10 +26,3 @@
 ##========================================================================== //
 
 emit_answer(tb_rob rob.sv rob.cpp)
-
-add_test(NAME tb_rob_0 COMMAND tb_rob --seed=1)
-add_test(NAME tb_rob_1 COMMAND tb_rob --seed=2)
-add_test(NAME tb_rob_2 COMMAND tb_rob --seed=3)
-add_test(NAME tb_rob_3 COMMAND tb_rob --seed=4)
-add_test(NAME tb_rob_4 COMMAND tb_rob --seed=5)
-

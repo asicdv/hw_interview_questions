@@ -26,9 +26,3 @@
 ##========================================================================== //
 
 emit_answer(tb_linked_list_fifo linked_list_fifo.sv linked_list_fifo.cpp)
-
-add_test(NAME tb_linked_list_fifo_0 COMMAND tb_linked_list_fifo --seed=1)
-add_test(NAME tb_linked_list_fifo_1 COMMAND tb_linked_list_fifo --seed=2)
-add_test(NAME tb_linked_list_fifo_2 COMMAND tb_linked_list_fifo --seed=3)
-add_test(NAME tb_linked_list_fifo_3 COMMAND tb_linked_list_fifo --seed=4)
-add_test(NAME tb_linked_list_fifo_4 COMMAND tb_linked_list_fifo --seed=5)

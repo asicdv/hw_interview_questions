@@ -26,8 +26,3 @@
 ##========================================================================== //
 
 emit_answer(tb_increment fast_increment.sv increment.cpp)
-
-add_test(NAME tb_increment_0 COMMAND tb_increment --seed=1)
-add_test(NAME tb_increment_1 COMMAND tb_increment --seed=2)
-add_test(NAME tb_increment_2 COMMAND tb_increment --seed=3)
-add_test(NAME tb_increment_3 COMMAND tb_increment --seed=4)

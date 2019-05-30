@@ -26,5 +26,3 @@
 ##========================================================================== //
 
 emit_answer(tb_gates_from_MUX2X1 gates_from_MUX2X1.sv gates_from_MUX2X1.cpp)
-
-add_test(NAME tb_gate_from_MUX2X1 COMMAND tb_gates_from_MUX2X1 --seed=1)

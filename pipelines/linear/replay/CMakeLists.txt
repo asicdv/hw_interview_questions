@@ -27,5 +27,3 @@
 
 emit_answer(
   tb_replay replay.sv replay.cpp)
-
-add_test(NAME tb_replay_0 COMMAND tb_replay --seed=1)

@@ -27,5 +27,3 @@
 
 emit_answer(tb_using_full_adders using_full_adders.sv using_full_adders.cpp)
 
-add_test(NAME tb_using_full_adders COMMAND tb_using_full_adders --seed=1)
-

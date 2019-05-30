@@ -26,8 +26,3 @@
 ##========================================================================== //
 
 emit_answer(tb_simd simd.sv simd.cpp)
- 
-add_test(NAME tb_simd_0 COMMAND tb_simd --seed=1)
-add_test(NAME tb_simd_1 COMMAND tb_simd --seed=2)
-add_test(NAME tb_simd_2 COMMAND tb_simd --seed=3)
-add_test(NAME tb_simd_3 COMMAND tb_simd --seed=4)

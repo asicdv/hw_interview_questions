@@ -26,9 +26,3 @@
 ##========================================================================== //
 
 emit_answer(tb_fifo_n fifo_n.sv fifo_n.cpp)
-
-add_test(NAME tb_fifo_n_0 COMMAND tb_fifo_n --seed=1)
-add_test(NAME tb_fifo_n_1 COMMAND tb_fifo_n --seed=2)
-add_test(NAME tb_fifo_n_2 COMMAND tb_fifo_n --seed=3)
-add_test(NAME tb_fifo_n_3 COMMAND tb_fifo_n --seed=4)
-add_test(NAME tb_fifo_n_4 COMMAND tb_fifo_n --seed=5)

@@ -27,9 +27,3 @@
 
 emit_answer(
   tb_multi_counter_variants multi_counter_variants.sv multi_counter_variants.cpp)
-
-add_test(NAME tb_multi_counter_variants_0 COMMAND tb_multi_counter_variants --seed=1)
-add_test(NAME tb_multi_counter_variants_1 COMMAND tb_multi_counter_variants --seed=2)
-add_test(NAME tb_multi_counter_variants_2 COMMAND tb_multi_counter_variants --seed=3)
-add_test(NAME tb_multi_counter_variants_3 COMMAND tb_multi_counter_variants --seed=4)
-add_test(NAME tb_multi_counter_variants_4 COMMAND tb_multi_counter_variants --seed=5)

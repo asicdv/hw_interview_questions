@@ -27,9 +27,3 @@
 
 emit_answer(tb_missing_duplicated_word
   missing_duplicated_word.sv missing_duplicated_word.cpp)
-
-add_test(NAME tb_missing_duplicated_word_0 COMMAND tb_missing_duplicated_word --seed=1)
-add_test(NAME tb_missing_duplicated_word_1 COMMAND tb_missing_duplicated_word --seed=2)
-add_test(NAME tb_missing_duplicated_word_2 COMMAND tb_missing_duplicated_word --seed=3)
-add_test(NAME tb_missing_duplicated_word_3 COMMAND tb_missing_duplicated_word --seed=4)
-add_test(NAME tb_missing_duplicated_word_4 COMMAND tb_missing_duplicated_word --seed=5)

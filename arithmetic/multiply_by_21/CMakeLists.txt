@@ -26,8 +26,3 @@
 ##========================================================================== //
 
 emit_answer(tb_multiply_by_21 multiply_by_21.sv multiply_by_21.cpp)
-  
-add_test(NAME tb_multiply_by_21_0 COMMAND tb_multiply_by_21 --seed=1)
-add_test(NAME tb_multiply_by_21_1 COMMAND tb_multiply_by_21 --seed=2)
-add_test(NAME tb_multiply_by_21_2 COMMAND tb_multiply_by_21 --seed=3)
-add_test(NAME tb_multiply_by_21_3 COMMAND tb_multiply_by_21 --seed=4)
