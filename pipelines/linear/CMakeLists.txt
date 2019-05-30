@@ -25,4 +25,11 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-add_subdirectory(linear)
+add_subdirectory(delay_pipe_mov)
+add_subdirectory(delay_pipe_static)
+add_subdirectory(comb_stall)
+add_subdirectory(double_buffer)
+add_subdirectory(replay)
+add_subdirectory(read_modify_write)
+add_subdirectory(precompute)
+add_subdirectory(tomasulo)
