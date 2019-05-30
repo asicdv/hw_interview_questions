@@ -120,8 +120,8 @@ std::ostream & operator<<(std::ostream & os, const Expect & ex) {
 static class TB : public ::sc_core::sc_module {
  public:
   SC_HAS_PROCESS(TB);
-  TB() :
-      ::sc_core::sc_module{::sc_core::sc_module_name{"MultiplierTest"}} {
+  TB() : ::sc_core::sc_module{
+    ::sc_core::sc_module_name{"MultiplierTest"}} {
     SC_THREAD(t_stimulus);
     
     SC_METHOD(m_checker);
@@ -189,8 +189,8 @@ TEST(MultiplierTest, Basic) {
   } a_ptr("a_constrained"), b_ptr("b_constrained");
 
   for (std::size_t i = 0; i < 1024; i++) {
-    const uint32_t a = *a_ptr.v;
-    const uint32_t b = *b_ptr.v;
+    const uint32_t a{*a_ptr.v};
+    const uint32_t b{*b_ptr.v};
 
     TB.add_stimulus(a, b, (a * b));
 
@@ -203,6 +203,6 @@ TEST(MultiplierTest, Basic) {
 int sc_main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   ::sc_core::sc_report_handler::set_actions(
-       "/stephenry", SC_LOG | SC_DISPLAY | SC_STOP);
+       "/stephenry", (SC_LOG | SC_DISPLAY | SC_STOP));
   return RUN_ALL_TESTS();
 }
