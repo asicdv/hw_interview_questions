@@ -78,21 +78,28 @@ static struct TOP {
   ~TOP() {
     stop_tracing();
   }
-  void set_idle() {
+  void idle() {
     pass = false;
     a = word_type{};
     b = word_type{};
   }
-  void set_pass(word_type set_a, word_type set_b) {
+  void pass_cmd(word_type set_a, word_type set_b) {
+    t_wait_not_busy();
     pass = true;
     a = set_a;
-    a = set_b;
+    b = set_b;
+    t_await_cycles(1);
+    idle();
   }
   void t_apply_reset() {
     rst = true;
     t_await_cycles(2);
     rst = false;
     t_await_cycles(2);
+  }
+  void t_wait_not_busy() {
+    while (busy_r)
+      t_await_cycles();
   }
   void t_await_cycles(std::size_t n = 1) {
     while (n--)
@@ -130,10 +137,10 @@ struct Task {
   virtual void execute() = 0;
 };
 
-static class TB : public ::sc_core::sc_module {
+static class TaskRunner : public ::sc_core::sc_module {
  public:
-  SC_HAS_PROCESS(TB);
-  TB() : ::sc_core::sc_module{::sc_core::sc_module_name{"TB"}} {
+  SC_HAS_PROCESS(TaskRunner);
+  TaskRunner() : ::sc_core::sc_module{::sc_core::sc_module_name{"TaskRunner"}} {
     SC_THREAD(t_stimulus);
   }
   void set_task(std::unique_ptr<Task> && task) { task_ = std::move(task); }
@@ -158,7 +165,7 @@ static class TB : public ::sc_core::sc_module {
   }
   ::sc_core::sc_event e_start_tb_;
   std::unique_ptr<Task> task_;
-} TB;
+} TaskRunner;
 
 TEST(MultiplierTest, Basic) {
   struct BasicTask : Task {
@@ -211,18 +218,17 @@ TEST(MultiplierTest, Basic) {
         h_check.kill();
     }
     void t_stimulus() {
-      TOP.set_idle();
+      TOP.idle();
       TOP.t_apply_reset();
       while (!stimulus_.empty() && !fail()) {
         const Expect & ex{stimulus_.front()};
 
-        TOP.set_pass(ex.a(), ex.b());
-        TOP.t_await_cycles(1);
+        TOP.pass_cmd(ex.a(), ex.b());
 
         expected_.push(ex);
         stimulus_.pop();
       }
-      TOP.set_idle();
+      TOP.idle();
       wait (100, SC_NS);
       is_completed_ = true; 
     }
@@ -243,8 +249,8 @@ TEST(MultiplierTest, Basic) {
     std::size_t n_;
     std::queue<Expect> stimulus_, expected_;
   };
-  TB.set_task(std::make_unique<BasicTask>(1024));
-  TB.run_until_exhausted(true);
+  TaskRunner.set_task(std::make_unique<BasicTask>(1024 << 3));
+  TaskRunner.run_until_exhausted(true);
 }
 
 int sc_main(int argc, char ** argv) {
