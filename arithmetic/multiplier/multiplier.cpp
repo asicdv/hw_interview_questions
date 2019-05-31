@@ -103,6 +103,10 @@ static struct TOP {
 } TOP;
 
 struct Expect {
+  friend std::ostream & operator<<(std::ostream & os, const Expect & ex) {
+    return os << "'{a=" << ex.a() << ", b=" << ex.b() << ", y=" << ex.y() << "}";
+  }
+
   Expect(word_type a, word_type b, result_type y)
       : a_(a), b_(b), y_(y) {}
   word_type a() const { return a_; }
@@ -112,10 +116,6 @@ struct Expect {
   word_type a_, b_;
   result_type y_;
 };
-
-std::ostream & operator<<(std::ostream & os, const Expect & ex) {
-  return os << "'{a=" << ex.a() << ", b=" << ex.b() << ", y=" << ex.y() << "}";
-}
 
 static class TB : public ::sc_core::sc_module {
  public:
@@ -133,13 +133,16 @@ static class TB : public ::sc_core::sc_module {
   }
   void run_until_exhausted() {
     e_start_tb_.notify(1, SC_NS);
-    while (!stimulus_.empty())
+    while (running())
       ::sc_core::sc_start(10, SC_US);
   }
 
  private:
+  bool running() const {
+    return !::testing::Test::HasFatalFailure() && !stimulus_.empty();
+  }
   void t_stimulus() {
-    while (true) {
+    while (running()) {
       wait(e_start_tb_);
       t_main_loop();
     }
@@ -147,7 +150,7 @@ static class TB : public ::sc_core::sc_module {
   void t_main_loop() {
     TOP.set_idle();
     TOP.t_apply_reset();
-    while (!stimulus_.empty()) {
+    while (running()) {
       const Expect & ex{stimulus_.front()};
 
       TOP.pass = true;
@@ -159,20 +162,17 @@ static class TB : public ::sc_core::sc_module {
       stimulus_.pop();
     }
     TOP.set_idle();
-    wait (100, SC_NS);
+     wait (100, SC_NS);
   }
   void m_checker() {
     if (TOP.y_vld_r) {
-      EXPECT_FALSE(expected_.empty());
+      ASSERT_FALSE(expected_.empty());
 
       const Expect & ex{expected_.front()};
-      EXPECT_EQ(TOP.y, ex.y());
-      if (TOP.y != ex.y()) {
-        std::ostringstream os;
-        os << "Stimulus mismatch: " << ex;
-        const std::string s{os.str()};
-        SC_REPORT_ERROR("/stephenry", s.c_str());
-      }
+      ASSERT_EQ(TOP.y, ex.y()) << "["
+                               << ::sc_core::sc_time_stamp()
+                               << "]: Stimulus mismatch: "
+                               << ex;
       expected_.pop();
     }
   }
@@ -202,7 +202,5 @@ TEST(MultiplierTest, Basic) {
 
 int sc_main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
-  ::sc_core::sc_report_handler::set_actions(
-       "/stephenry", (SC_LOG | SC_DISPLAY | SC_STOP));
   return RUN_ALL_TESTS();
 }
