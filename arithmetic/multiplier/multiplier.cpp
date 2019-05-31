@@ -126,7 +126,7 @@ static struct TOP {
 
 struct Task {
   virtual ~Task() {}
-  virtual bool is_running() const { return false; }
+  virtual bool is_completed() const { return false; }
   virtual void execute() = 0;
 };
 
@@ -139,7 +139,7 @@ static class TB : public ::sc_core::sc_module {
   void set_task(std::unique_ptr<Task> && task) { task_ = std::move(task); }
   void run_until_exhausted(bool do_stop = false) {
     e_start_tb_.notify(1, SC_NS);
-    while (task_->is_running())
+    while (!task_->is_completed())
       ::sc_core::sc_start(10, SC_US);
     if (do_stop)
       ::sc_core::sc_stop();
@@ -187,13 +187,13 @@ TEST(MultiplierTest, Basic) {
         b_ptr.next();
       }
     }
-    bool is_running() const override {
-      return is_running_;
-      return !::testing::Test::HasFatalFailure() && !stimulus_.empty();
+    bool is_completed() const override {
+      return is_completed_;
     }
     void launch() {
       using namespace sc_core;
 
+      // Fork:
       sc_process_handle h_stim =
           sc_spawn(std::bind(&BasicTask::t_stimulus, this), "t_stimulus");
 
@@ -205,13 +205,15 @@ TEST(MultiplierTest, Basic) {
       sc_process_handle h_check = 
           sc_spawn(std::bind(&BasicTask::m_checker, this), "m_checker", &copts );
 
+      // Join:
       wait(h_stim.terminated_event());
-      h_check.kill();
+      if (!h_check.terminated())
+        h_check.kill();
     }
     void t_stimulus() {
       TOP.set_idle();
       TOP.t_apply_reset();
-      while (is_running()) {
+      while (!stimulus_.empty() && !fail()) {
         const Expect & ex{stimulus_.front()};
 
         TOP.set_pass(ex.a(), ex.b());
@@ -222,7 +224,7 @@ TEST(MultiplierTest, Basic) {
       }
       TOP.set_idle();
       wait (100, SC_NS);
-      is_running_ = false;x
+      is_completed_ = true; 
     }
     void m_checker() {
       if (TOP.y_vld_r) {
@@ -236,7 +238,8 @@ TEST(MultiplierTest, Basic) {
         expected_.pop();
       }
     }
-    bool is_running_{true};
+    bool fail() const { return ::testing::Test::HasFatalFailure(); }
+    bool is_completed_{false};
     std::size_t n_;
     std::queue<Expect> stimulus_, expected_;
   };
