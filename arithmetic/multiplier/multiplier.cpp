@@ -27,11 +27,13 @@
 
 #define TB_ENABLE_TRACING
 
+#define SC_INCLUDE_DYNAMIC_PROCESSES
 #include <systemc>
 #include <scv.h>
 #include <gtest/gtest.h>
 #include <queue>
 #include <sstream>
+#include <functional>
 #include "vobj/Vmultiplier.h"
 #ifdef TB_ENABLE_TRACING
 #  include "verilated_vcd_sc.h"
@@ -47,6 +49,21 @@ using result_type = vluint64_t;
   __func(y, result_type)                        \
   __func(y_vld_r, bool)                         \
   __func(busy_r, bool)
+
+struct Expect {
+  friend std::ostream & operator<<(std::ostream & os, const Expect & ex) {
+    return os << "'{a=" << ex.a() << ", b=" << ex.b() << ", y=" << ex.y() << "}";
+  }
+
+  Expect(word_type a, word_type b, result_type y)
+      : a_(a), b_(b), y_(y) {}
+  word_type a() const { return a_; }
+  word_type b() const { return b_; }
+  result_type y() const { return y_; }
+ private:
+  word_type a_, b_;
+  result_type y_;
+};
 
 static struct TOP {
   TOP() {
@@ -65,6 +82,11 @@ static struct TOP {
     pass = false;
     a = word_type{};
     b = word_type{};
+  }
+  void set_pass(word_type set_a, word_type set_b) {
+    pass = true;
+    a = set_a;
+    a = set_b;
   }
   void t_apply_reset() {
     rst = true;
@@ -102,102 +124,124 @@ static struct TOP {
 #endif
 } TOP;
 
-struct Expect {
-  friend std::ostream & operator<<(std::ostream & os, const Expect & ex) {
-    return os << "'{a=" << ex.a() << ", b=" << ex.b() << ", y=" << ex.y() << "}";
-  }
-
-  Expect(word_type a, word_type b, result_type y)
-      : a_(a), b_(b), y_(y) {}
-  word_type a() const { return a_; }
-  word_type b() const { return b_; }
-  result_type y() const { return y_; }
- private:
-  word_type a_, b_;
-  result_type y_;
+struct Task {
+  virtual ~Task() {}
+  virtual bool is_running() const { return false; }
+  virtual void execute() = 0;
 };
 
 static class TB : public ::sc_core::sc_module {
  public:
   SC_HAS_PROCESS(TB);
-  TB() : ::sc_core::sc_module{
-    ::sc_core::sc_module_name{"MultiplierTest"}} {
+  TB() : ::sc_core::sc_module{::sc_core::sc_module_name{"TB"}} {
     SC_THREAD(t_stimulus);
-    
-    SC_METHOD(m_checker);
-    sensitive << TOP.clk.negedge_event();
-    dont_initialize();
   }
-  void add_stimulus(word_type a, word_type b, result_type y) {
-    stimulus_.push(Expect{a,b,y});
-  }
-  void run_until_exhausted() {
+  void set_task(std::unique_ptr<Task> && task) { task_ = std::move(task); }
+  void run_until_exhausted(bool do_stop = false) {
     e_start_tb_.notify(1, SC_NS);
-    while (running())
+    while (task_->is_running())
       ::sc_core::sc_start(10, SC_US);
+    if (do_stop)
+      ::sc_core::sc_stop();
   }
 
  private:
-  bool running() const {
-    return !::testing::Test::HasFatalFailure() && !stimulus_.empty();
-  }
   void t_stimulus() {
-    while (running()) {
+    while (true) {
       wait(e_start_tb_);
       t_main_loop();
     }
   }
   void t_main_loop() {
-    TOP.set_idle();
-    TOP.t_apply_reset();
-    while (running()) {
-      const Expect & ex{stimulus_.front()};
-
-      TOP.pass = true;
-      TOP.a = ex.a();
-      TOP.b = ex.b();
-      TOP.t_await_cycles(1);
-
-      expected_.push(ex);
-      stimulus_.pop();
-    }
-    TOP.set_idle();
-     wait (100, SC_NS);
+    if (task_)
+      task_->execute();
   }
-  void m_checker() {
-    if (TOP.y_vld_r) {
-      ASSERT_FALSE(expected_.empty());
-
-      const Expect & ex{expected_.front()};
-      ASSERT_EQ(TOP.y, ex.y()) << "["
-                               << ::sc_core::sc_time_stamp()
-                               << "]: Stimulus mismatch: "
-                               << ex;
-      expected_.pop();
-    }
-  }
-  std::queue<Expect> stimulus_, expected_;
   ::sc_core::sc_event e_start_tb_;
+  std::unique_ptr<Task> task_;
 } TB;
 
 TEST(MultiplierTest, Basic) {
-  struct stimulus_constraint : scv_constraint_base {
-    scv_smart_ptr<uint32_t> v;
-    SCV_CONSTRAINT_CTOR(stimulus_constraint) {
-      SCV_CONSTRAINT(v() < 1024);
+  struct BasicTask : Task {
+    explicit BasicTask(std::size_t n = 10)
+        : n_(n) {}
+    void execute() override {
+      setup();
+      launch();
     }
-  } a_ptr("a_constrained"), b_ptr("b_constrained");
+   private:
+    void setup() {
+      struct stimulus_constraint : scv_constraint_base {
+        scv_smart_ptr<uint32_t> v;
+        SCV_CONSTRAINT_CTOR(stimulus_constraint) {
+          SCV_CONSTRAINT(v() < 1024);
+        }
+      } a_ptr("a_constrained"), b_ptr("b_constrained");
 
-  for (std::size_t i = 0; i < 1024; i++) {
-    const uint32_t a{*a_ptr.v};
-    const uint32_t b{*b_ptr.v};
+      for (std::size_t i = 0; i < n_; i++) {
+        const uint32_t a{*a_ptr.v};
+        const uint32_t b{*b_ptr.v};
 
-    TB.add_stimulus(a, b, (a * b));
+        stimulus_.push(Expect{a, b, (a * b)});
 
-    a_ptr.next();
-    b_ptr.next();
-  }
-  TB.run_until_exhausted();
+        a_ptr.next();
+        b_ptr.next();
+      }
+    }
+    bool is_running() const override {
+      return is_running_;
+      return !::testing::Test::HasFatalFailure() && !stimulus_.empty();
+    }
+    void launch() {
+      using namespace sc_core;
+
+      sc_process_handle h_stim =
+          sc_spawn(std::bind(&BasicTask::t_stimulus, this), "t_stimulus");
+
+      sc_spawn_options copts;
+      copts.set_sensitivity(&TOP.clk.negedge_event());
+      copts.spawn_method();
+      copts.dont_initialize();
+
+      sc_process_handle h_check = 
+          sc_spawn(std::bind(&BasicTask::m_checker, this), "m_checker", &copts );
+
+      wait(h_stim.terminated_event());
+      h_check.kill();
+    }
+    void t_stimulus() {
+      TOP.set_idle();
+      TOP.t_apply_reset();
+      while (is_running()) {
+        const Expect & ex{stimulus_.front()};
+
+        TOP.set_pass(ex.a(), ex.b());
+        TOP.t_await_cycles(1);
+
+        expected_.push(ex);
+        stimulus_.pop();
+      }
+      TOP.set_idle();
+      wait (100, SC_NS);
+      is_running_ = false;x
+    }
+    void m_checker() {
+      if (TOP.y_vld_r) {
+        ASSERT_FALSE(expected_.empty());
+
+        const Expect & ex{expected_.front()};
+        ASSERT_EQ(TOP.y, ex.y()) << "["
+                                 << ::sc_core::sc_time_stamp()
+                                 << "]: Stimulus mismatch: "
+                                 << ex;
+        expected_.pop();
+      }
+    }
+    bool is_running_{true};
+    std::size_t n_;
+    std::queue<Expect> stimulus_, expected_;
+  };
+  TB.set_task(std::make_unique<BasicTask>(1024));
+  TB.run_until_exhausted(true);
 }
 
 int sc_main(int argc, char ** argv) {
