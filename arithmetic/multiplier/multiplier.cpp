@@ -25,8 +25,6 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-#define TB_ENABLE_TRACING
-
 #define SC_INCLUDE_DYNAMIC_PROCESSES
 #include <systemc>
 #pragma GCC diagnostic push
