@@ -29,8 +29,10 @@
 
 #define SC_INCLUDE_DYNAMIC_PROCESSES
 #include <systemc>
+#pragma GCC diagnostic push
 #pragma GCC diagnostic ignored  "-Wnull-dereference"
 #include <scv.h>
+#pragma GCC diagnostic pop
 #include <gtest/gtest.h>
 #include <queue>
 #include <sstream>
