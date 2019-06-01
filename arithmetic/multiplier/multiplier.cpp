@@ -29,6 +29,7 @@
 
 #define SC_INCLUDE_DYNAMIC_PROCESSES
 #include <systemc>
+#pragma GCC diagnostic ignored  "-Wnull-dereference"
 #include <scv.h>
 #include <gtest/gtest.h>
 #include <queue>
