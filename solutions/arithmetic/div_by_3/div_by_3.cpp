@@ -40,7 +40,6 @@ using word_type = uint32_t;
   __func(valid_r, bool)                         \
   __func(y_r, word_type)
 
-
 struct Stimulus {
   friend std::ostream & operator<<(std::ostream & os, const Stimulus & stim) {
     return os << "'{a=" << stim.x() << "}";
@@ -85,7 +84,7 @@ struct TOP : tb::Top {
   }
   void set_idle() {
     pass = false;
-    //    x = word_type{};
+    x = word_type{};
   }
   bool out_is_valid() const { return valid_r; }
   void t_set_stimulus(const stimulus_type & stim) {
@@ -144,7 +143,7 @@ tb::TaskRunner TaskRunner;
 } // namespace
 
 TEST(DivBy3Test, Basic) {
-  const std::size_t n{1024 << 3};
+  const std::size_t n{1024 << 5};
   auto task = std::make_unique<
     tb::BasicPassValidNotBusyTask<TOP> >(top);
 

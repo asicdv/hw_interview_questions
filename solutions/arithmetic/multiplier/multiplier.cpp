@@ -43,22 +43,34 @@ using result_type = vluint64_t;
   __func(y_vld_r, bool)                         \
   __func(busy_r, bool)
 
-struct Expect {
-  friend std::ostream & operator<<(std::ostream & os, const Expect & ex) {
-    return os << "'{a=" << ex.a() << ", b=" << ex.b() << ", y=" << ex.y() << "}";
+struct Stimulus {
+  friend std::ostream & operator<<(std::ostream & os, const Stimulus & stim) {
+    return os << "'{a=" << stim.a() << "}";
   }
-
-  Expect(word_type a, word_type b, result_type y)
-      : a_(a), b_(b), y_(y) {}
+  Stimulus(word_type a, word_type b) : a_(a), b_(b) {}
   word_type a() const { return a_; }
   word_type b() const { return b_; }
-  result_type y() const { return y_; }
  private:
   word_type a_, b_;
+};
+
+struct Expect {
+  friend std::ostream & operator<<(std::ostream & os, const Expect & res) {
+    return os << "'{e=" << res.y() << "}";
+  }
+  friend bool operator==(const Expect & a, const Expect & b) {
+    return (a.y() == b.y());
+  }
+  Expect(result_type y) : y_(y) {}
+  result_type y() const { return y_; }
+ private:
   result_type y_;
 };
 
-static struct TOP {
+struct TOP : tb::Top {
+  using stimulus_type = Stimulus;
+  using expected_type = Expect;
+
   TOP() {
     v.rst(rst);
     v.clk(clk);
@@ -71,19 +83,21 @@ static struct TOP {
   ~TOP() {
     stop_tracing();
   }
-  void idle() {
+  void set_idle() {
     pass = false;
     a = word_type{};
     b = word_type{};
   }
-  void pass_cmd(word_type set_a, word_type set_b) {
+  void t_set_stimulus(const stimulus_type & stim) {
     t_wait_not_busy();
     pass = true;
-    a = set_a;
-    b = set_b;
+    a = stim.a();
+    b = stim.b();
     t_await_cycles(1);
-    idle();
+    set_idle();
   }
+  bool out_is_valid() const { return y_vld_r; }
+  Expect get_expect() const { return Expect{y}; }
   void t_apply_reset() {
     rst = true;
     t_await_cycles(2);
@@ -122,93 +136,34 @@ static struct TOP {
 #ifdef OPT_ENABLE_TRACE
   std::unique_ptr<VerilatedVcdSc> vcd_;
 #endif
-} TOP;
+};
 
-namespace { tb::TaskRunner TaskRunner; } // namespace
+namespace {
+
+TOP top;
+tb::TaskRunner TaskRunner;
+
+} // namespace
 
 TEST(MultiplierTest, Basic) {
-  struct BasicTask : tb::Task {
-    explicit BasicTask(std::size_t n = 10)
-        : n_(n) {}
-    void execute() override {
-      setup();
-      launch();
+  const std::size_t n{1024 << 3};
+  auto task = std::make_unique<
+    tb::BasicPassValidNotBusyTask<TOP> >(top);
+  struct stimulus_constraint : scv_constraint_base {
+    scv_smart_ptr<uint32_t> v;
+    SCV_CONSTRAINT_CTOR(stimulus_constraint) {
+      SCV_CONSTRAINT(v() < 1024);
     }
-   private:
-    void setup() {
-      struct stimulus_constraint : scv_constraint_base {
-        scv_smart_ptr<uint32_t> v;
-        SCV_CONSTRAINT_CTOR(stimulus_constraint) {
-          SCV_CONSTRAINT(v() < 1024);
-        }
-      } a_ptr("a_constrained"), b_ptr("b_constrained");
+  } a_ptr("a_constrained"), b_ptr("b_constrained");
 
-      for (std::size_t i = 0; i < n_; i++) {
-        const uint32_t a{*a_ptr.v};
-        const uint32_t b{*b_ptr.v};
-
-        stimulus_.push(Expect{a, b, (a * b)});
-
-        a_ptr.next();
-        b_ptr.next();
-      }
-    }
-    bool is_completed() const override {
-      return is_completed_;
-    }
-    void launch() {
-      using namespace sc_core;
-
-      // Fork:
-      sc_process_handle h_stim =
-          sc_spawn(std::bind(&BasicTask::t_stimulus, this), "t_stimulus");
-
-      sc_spawn_options copts;
-      copts.set_sensitivity(&TOP.clk.negedge_event());
-      copts.spawn_method();
-      copts.dont_initialize();
-
-      sc_process_handle h_check = 
-          sc_spawn(std::bind(&BasicTask::m_checker, this), "m_checker", &copts );
-
-      // Join:
-      wait(h_stim.terminated_event());
-      if (!h_check.terminated())
-        h_check.kill();
-    }
-    void t_stimulus() {
-      TOP.idle();
-      TOP.t_apply_reset();
-      while (!stimulus_.empty() && !fail()) {
-        const Expect & ex{stimulus_.front()};
-
-        TOP.pass_cmd(ex.a(), ex.b());
-
-        expected_.push(ex);
-        stimulus_.pop();
-      }
-      TOP.idle();
-      wait (100, SC_NS);
-      is_completed_ = true; 
-    }
-    void m_checker() {
-      if (TOP.y_vld_r) {
-        ASSERT_FALSE(expected_.empty());
-
-        const Expect & ex{expected_.front()};
-        ASSERT_EQ(TOP.y, ex.y()) << "["
-                                 << ::sc_core::sc_time_stamp()
-                                 << "]: Stimulus mismatch: "
-                                 << ex;
-        expected_.pop();
-      }
-    }
-    bool fail() const { return ::testing::Test::HasFatalFailure(); }
-    bool is_completed_{false};
-    std::size_t n_;
-    std::queue<Expect> stimulus_, expected_;
-  };
-  TaskRunner.set_task(std::make_unique<BasicTask>(1024 << 3));
+  for (std::size_t i = 0; i < n; i++) {
+    const Stimulus stim{*a_ptr.v, *b_ptr.v};
+    task->add_stimulus(stim);
+    task->add_expected(Expect{stim.a() * stim.b()});
+    a_ptr.next();
+    b_ptr.next();
+  }
+  TaskRunner.set_task(std::move(task));
   TaskRunner.run_until_exhausted(true);
 }
 

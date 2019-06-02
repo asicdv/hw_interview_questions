@@ -104,11 +104,15 @@ macro (emit_solution)
 
   add_verilator_include_path(${CMAKE_CURRENT_SOURCE_DIR})
   add_verilator_include_path(${CMAKE_CURRENT_BINARY_DIR})
+  if (${OPT_ENABLE_TRACE})
+    add_verilator_option("--trace")
+    add_verilator_option("--trace-structs")
+  endif ()
 
   get_filename_component(solution ${PARSED_ARGS_VTOP} NAME_WE)
 
   verilate_sc(verilate_${PARSED_ARGS_TARGET} ${solution} vobj)
-  if ("${PARSED_ARGS_DEPS}")
+  if (PARSED_ARGS_DEPS)
     add_dependencies(verilate_${PARSED_ARGS_TARGET} ${PARSED_ARGS_DEPS})
   endif ()
   add_executable(${PARSED_ARGS_TARGET} ${PARSED_ARGS_TB})
@@ -116,13 +120,9 @@ macro (emit_solution)
   
   target_include_directories(
     ${PARSED_ARGS_TARGET} PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
-  target_link_libraries(${PARSED_ARGS_TARGET}
-    systemc scv tb ${vobj} vcom gtest_main gtest pthread)
-  if (OPT_TESTS_EN)
+  target_link_libraries(${PARSED_ARGS_TARGET} systemc scv tb ${vobj} vcom)
+  if (${OPT_TESTS_EN})
+    target_link_libraries(${PARSED_ARGS_TARGET} gtest_main gtest pthread)
     add_test(NAME ${PARSED_ARGS_TARGET} COMMAND ${PARSED_ARGS_TARGET})
-  endif ()
-  if (OPT_ENABLE_TRACE)
-    add_verilator_option("--trace")
-    add_verilator_option("--trace-structs")
   endif ()
 endmacro()

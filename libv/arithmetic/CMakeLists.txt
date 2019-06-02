@@ -34,20 +34,22 @@ if (PYTHONINTERP_FOUND)
   macro(generate_brent_kung W)
     add_custom_target(
       brent_kung_${W}
-      ALL
+      BYPRODUCTS "${CMAKE_CURRENT_BINARY_DIR}/carry_chain_brent_kung_${W}.sv"
       COMMAND ${PYTHON_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/scripts/generate_brent_kung.py ${W}
       COMMENT "Generating Brent/Kung carry chain W = ${W}"
+      DEPENDS "${CMAKE_SOURCE_DIR}/scripts/generate_brent_kung.py"  
       )
   endmacro()
 
   macro(generate_csa N W)
     add_custom_target(
       csa_N${N}_${W}b
-      ALL
+      BYPRODUCTS "${CMAKE_CURRENT_BINARY_DIR}/csa_N${N}_${W}b.sv"
       COMMAND ${PYTHON_EXECUTABLE}
         ${CMAKE_SOURCE_DIR}/scripts/generate_csa.py ${N} ${W}
       COMMENT "Generating CSA N = ${N}, W = ${W}."
+      DEPENDS "${CMAKE_SOURCE_DIR}/scripts/generate_csa.py"  
       )
   endmacro()
 
