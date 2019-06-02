@@ -107,7 +107,7 @@ static struct TOP {
 #undef __declare_signal
  private:
   void start_tracing() {
-#ifdef TB_ENABLE_TRACING
+#ifdef OPT_ENABLE_TRACE
     Verilated::traceEverOn(true);
     vcd_ = std::make_unique<VerilatedVcdSc>();
     v.trace(vcd_.get(), 99);
@@ -115,11 +115,11 @@ static struct TOP {
 #endif
   }
   void stop_tracing() {
-#ifdef TB_ENABLE_TRACING
+#ifdef OPT_ENABLE_TRACE
     vcd_->close();
 #endif
   }
-#ifdef TB_ENABLE_TRACING
+#ifdef OPT_ENABLE_TRACE
   std::unique_ptr<VerilatedVcdSc> vcd_;
 #endif
 } TOP;

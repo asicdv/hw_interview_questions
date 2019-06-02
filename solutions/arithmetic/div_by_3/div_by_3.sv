@@ -87,13 +87,28 @@ module div_by_3 (
   logic                       accumulator_en;
   //
   logic                       valid_w;
+  //
+  logic [15:0]                x_retained_r;
+  logic [15:0]                x_retained_w;
+  logic                       x_retained_en;
 
+  // ------------------------------------------------------------------------ //
+  //
+  always_comb
+    begin : in_PROC
+
+      //
+      x_retained_en   = pass;
+      x_retained_w    = x;
+
+    end
+  
   // ------------------------------------------------------------------------ //
   //
   always_comb
     begin : cntrl_PROC
 
-      Q16_15_t x_ext = Q16_15_t'(x);
+      Q16_15_t x_ext  = Q16_15_t'(x_retained_r);
 
       //
       case (state_r)
@@ -125,7 +140,7 @@ module div_by_3 (
       endcase // casez ({pass, busy_r})
 
       //
-      state_en = pass | busy_r;
+      state_en = (pass | busy_r);
 
       //
       busy_w = pass | (busy_r & (state_w != '0));
@@ -141,6 +156,12 @@ module div_by_3 (
 
     end // block: cntrl_PROC
 
+  // ------------------------------------------------------------------------ //
+  //
+  always_ff @(posedge clk)
+    if (x_retained_en)
+      x_retained_r <= x_retained_w;
+  
   // ------------------------------------------------------------------------ //
   //
   always_ff @(posedge clk)

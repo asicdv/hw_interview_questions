@@ -25,5 +25,7 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
+configure_file(options.hpp.in options.hpp)
 add_library(tb SHARED task.cpp)
-target_link_libraries(tb ${SystemC_LIB})
+target_link_libraries(tb ${SystemC_LIB} gtest_main gtest pthread)
+target_include_directories(tb PUBLIC ${CMAKE_CURRENT_BINARY_DIR})

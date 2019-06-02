@@ -25,101 +25,147 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-#include <libtb2.hpp>
-#include <deque>
+#include "libtb/libtb.hpp"
+#include <gtest/gtest.h>
+#include <queue>
+#include <cmath>
 #include "vobj/Vdiv_by_3.h"
+
+using word_type = uint32_t;
 
 #define PORTS(__func)                           \
   __func(pass, bool)                            \
-  __func(x, uint32_t)                           \
+  __func(x, word_type)                          \
   __func(busy_r, bool)                          \
   __func(valid_r, bool)                         \
-  __func(y_r, uint32_t)
+  __func(y_r, word_type)
 
-typedef Vdiv_by_3 uut_t;
 
-struct DivBy3Tb : libtb2::Top<DivBy3Tb> {
-  SC_HAS_PROCESS(DivBy3Tb);
-  DivBy3Tb(sc_core::sc_module_name mn = "t")
-    : uut_("uut"), clk_("clk"), rst_("rst")
-  {
-    //
-    resetter_.clk(clk_);
-    resetter_.rst(rst_);
-    //
-    wd_.clk(clk_);
-    sampler_.clk(clk_);
-    //
-    uut_.clk(clk_);
-    uut_.rst(rst_);
-#define __bind_ports(__name, __type)            \
-    uut_.__name(__name ## _);
-    PORTS(__bind_ports)
-#undef __bind_ports
-
-    SC_THREAD(t_stimulus);
-    SC_METHOD(m_checker);
-    sensitive << sampler_.sample();
-    dont_initialize();
+struct Stimulus {
+  friend std::ostream & operator<<(std::ostream & os, const Stimulus & stim) {
+    return os << "'{a=" << stim.x() << "}";
   }
-private:
-  void t_stimulus() {
-    struct x_constraint : scv_constraint_base {
-      scv_smart_ptr<uint32_t> p;
-      SCV_CONSTRAINT_CTOR(x_constraint) {
-        SCV_CONSTRAINT((p() >= 0) && (p() < (1 << 16) - 1));
-      }
-    } x_c("x_constraint");
-
-    pass_ = false;
-    x_ = 0;
-
-    resetter_.wait_reset_done();
-    while (true) {
-      x_c.next();
-
-      const uint32_t x = *x_c.p;
-      q_.push_back(x / 3);
-
-      pass_ = true;
-      x_ = x;
-      wait(clk_.posedge_event());
-      pass_ = false;
-
-      if (!busy_r_)
-        wait(busy_r_.posedge_event());
-
-      while (busy_r_)
-        wait(clk_.posedge_event());
-    }
-  }
-  void m_checker() {
-    if (valid_r_) {
-      const uint32_t actual = y_r_;
-      const uint32_t expected = q_.front(); q_.pop_front();
-
-      // Account for rounding.
-      LIBTB2_ERROR_ON(std::abs(actual, expected) > 1);
-      LOGGER(INFO) << " Actual = " << actual
-                   << " Expected = " << expected
-                   << "\n";
-    }
-  }
-  std::deque<uint32_t> q_;
-  sc_core::sc_clock clk_;
-  sc_core::sc_signal<bool> rst_;
-#define __declare_signals(__name, __type)       \
-  sc_core::sc_signal<__type> __name ## _;
-  PORTS(__declare_signals)
-#undef __declare_signals
-  libtb2::Resetter resetter_;
-  libtb2::Sampler sampler_;
-  libtb2::SimWatchDogCycles wd_;
-  uut_t uut_;
+  Stimulus(word_type x) : x_(x) {}
+  word_type x() const { return x_; }
+ private:
+  word_type x_;
 };
-SC_MODULE_EXPORT(DivBy3Tb);
 
-int sc_main(int argc, char **argv) {
-  DivBy3Tb tb;
-  return libtb2::Sim::start(argc, argv);
+struct Expect {
+  friend std::ostream & operator<<(std::ostream & os, const Expect & res) {
+    return os << "'{e=" << res.y() << "}";
+  }
+  friend bool operator==(const Expect & a, const Expect & b) {
+    // In this simple example, we do not consider rounding, therefore
+    // equality is defined whenever the two values are within 1 unit
+    // of each other.
+    return std::abs((int)a.y() - (int)b.y()) <= 1;
+  }
+  Expect(word_type y) : y_(y) {}
+  word_type y() const { return y_; }
+ private:
+  word_type y_;
+};
+
+struct TOP : tb::Top {
+  using stimulus_type = Stimulus;
+  using expected_type = Expect;
+  
+  TOP() {
+    v.rst(rst);
+    v.clk(clk);
+#define __bind_signals(__name, __type)          \
+    v.__name(__name);
+    PORTS(__bind_signals)
+#undef __bind_signals
+    start_tracing();
+  }
+  ~TOP() {
+    stop_tracing();
+  }
+  void set_idle() {
+    pass = false;
+    //    x = word_type{};
+  }
+  bool out_is_valid() const { return valid_r; }
+  void t_set_stimulus(const stimulus_type & stim) {
+    t_wait_not_busy();
+    pass = true;
+    x = stim.x();
+    t_await_cycles(1);
+    set_idle();
+  }
+  Expect get_expect() const { return Expect{y_r}; }
+  void t_apply_reset() {
+    rst = true;
+    t_await_cycles(2);
+    rst = false;
+    t_await_cycles(2);
+  }
+  void t_wait_not_busy() {
+    while (busy_r)
+      t_await_cycles();
+  }
+  void t_await_cycles(std::size_t n = 1) {
+    while (n--)
+      wait(clk.negedge_event());
+  }
+  Vdiv_by_3 v{"div_by_3"};
+  ::sc_core::sc_signal<bool> rst{"rst"};
+  ::sc_core::sc_clock clk{"clk"};
+#define __declare_signal(__name, __type)        \
+  ::sc_core::sc_signal<__type> __name{#__name};
+  PORTS(__declare_signal)
+#undef __declare_signal
+ private:
+  void start_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    Verilated::traceEverOn(true);
+    vcd_ = std::make_unique<VerilatedVcdSc>();
+    v.trace(vcd_.get(), 99);
+    vcd_->open("sim.vcd");
+#endif
+  }
+  void stop_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    vcd_->close();
+#endif
+  }
+#ifdef OPT_ENABLE_TRACE
+  std::unique_ptr<VerilatedVcdSc> vcd_;
+#endif
+};
+
+namespace {
+
+TOP top;
+tb::TaskRunner TaskRunner;
+
+} // namespace
+
+TEST(DivBy3Test, Basic) {
+  const std::size_t n{1024 << 3};
+  auto task = std::make_unique<
+    tb::BasicPassValidNotBusyTask<TOP> >(top);
+
+  struct x_constraint : scv_constraint_base {
+    scv_smart_ptr<uint32_t> p;
+    SCV_CONSTRAINT_CTOR(x_constraint) {
+      SCV_CONSTRAINT((p() >= 0) && (p() < (1 << 16) - 1));
+    }
+  } x_c("x_constrained");
+
+  for (std::size_t i = 0; i < n; i++) {
+    const Stimulus stim{*x_c.p};
+    task->add_stimulus(stim);
+    task->add_expected(Expect{stim.x() / 3});
+    x_c.next();
+  }
+  TaskRunner.set_task(std::move(task));
+  TaskRunner.run_until_exhausted(true);
+}
+
+int sc_main(int argc, char ** argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
 }

@@ -25,21 +25,14 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-#ifndef __LIBTB_HPP__
-#define __LIBTB_HPP__
+#ifndef __TOP_HPP__
+#define __TOP_HPP__
 
-#include "options.hpp"
+namespace tb {
 
-#define SC_INCLUDE_DYNAMIC_PROCESSES
-#include <systemc>
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored  "-Wnull-dereference"
-#include <scv.h>
-#pragma GCC diagnostic pop
-#ifdef OPT_ENABLE_TRACE
-#  include "verilated_vcd_sc.h"
-#endif
+class Top {
+};
 
-#include "task.hpp"
+} // namespace tb
 
 #endif
