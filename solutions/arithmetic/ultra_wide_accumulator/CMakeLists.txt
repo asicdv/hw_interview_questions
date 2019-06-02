@@ -25,5 +25,11 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-emit_answer(tb_ultra_wide_accumulator
-  ultra_wide_accumulator.sv ultra_wide_accumulator.cpp)
+emit_solution(
+  TARGET
+  tb_ultra_wide_accumulator
+  VTOP
+  ultra_wide_accumulator.sv
+  TB
+  ultra_wide_accumulator.cpp
+  )

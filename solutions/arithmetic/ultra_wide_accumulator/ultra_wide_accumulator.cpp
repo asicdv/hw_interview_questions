@@ -1,136 +1,183 @@
 //========================================================================== //
-// Copyright (c) 2017, Stephen Henry
-// All rights reserved.
+// copyright (c) 2017, stephen henry
+// all rights reserved.
 //
-// Redistribution and use in source and binary forms, with or without
+// redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are met:
 //
-// * Redistributions of source code must retain the above copyright notice, this
+// * redistributions of source code must retain the above copyright notice, this
 //   list of conditions and the following disclaimer.
 //
-// * Redistributions in binary form must reproduce the above copyright notice,
+// * redistributions in binary form must reproduce the above copyright notice,
 //   this list of conditions and the following disclaimer in the documentation
 //   and/or other materials provided with the distribution.
 //
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
-// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-// POSSIBILITY OF SUCH DAMAGE.
+// this software is provided by the copyright holders and contributors "as is"
+// and any express or implied warranties, including, but not limited to, the
+// implied warranties of merchantability and fitness for a particular purpose
+// are disclaimed. in no event shall the copyright holder or contributors be
+// liable for any direct, indirect, incidental, special, exemplary, or
+// consequential damages (including, but not limited to, procurement of
+// substitute goods or services; loss of use, data, or profits; or business
+// interruption) however caused and on any theory of liability, whether in
+// contract, strict liability, or tort (including negligence or otherwise)
+// arising in any way out of the use of this software, even if advised of the
+// possibility of such damage.
 //========================================================================== //
 
-#include <libtb2.hpp>
-#include <deque>
+#include "libtb/libtb.hpp"
+#include <gtest/gtest.h>
 #include "vobj/Vultra_wide_accumulator.h"
 
-typedef Vultra_wide_accumulator uut_t;
 typedef sc_dt::sc_bv<128> rtl_word_t;
-typedef sc_dt::sc_biguint<128> beh_word_t;
-
-beh_word_t convert(const rtl_word_t & r) {
-  beh_word_t b;
-  b.range(127, 64) = r.range(127, 64).to_uint64();
-  b.range(63, 0) = r.range(63, 0).to_uint64();
-  return b;
-}
 
 #define PORTS(__func)                           \
   __func(pass, bool)                            \
   __func(clear, bool)                           \
-  __func(x, rtl_word_t)                             \
-  __func(y_r, rtl_word_t)                           \
+  __func(x, rtl_word_t)                         \
+  __func(y_r, rtl_word_t)                       \
   __func(y_vld_r, bool)
 
-struct AccumulatorModel {
-  AccumulatorModel() : word_(0) {}
-  void clear() { word_ = 0; }
-  void add(const beh_word_t & w) { word_ = word_ + w; }
-  beh_word_t word() const { return word_; }
-private:
-  beh_word_t word_;
+struct Stimulus {
+  friend std::ostream & operator<<(std::ostream & os, const Stimulus & stim) {
+    return os << "'{a=" << stim.x() << "}";
+  }
+  Stimulus(rtl_word_t x) : x_(x) {}
+  rtl_word_t x() const { return x_; }
+ private:
+  rtl_word_t x_;
 };
 
-struct UltraWideAccumulatorTb : libtb2::Top<UltraWideAccumulatorTb> {
-  SC_HAS_PROCESS(UltraWideAccumulatorTb);
-  UltraWideAccumulatorTb(sc_core::sc_module_name mn = "t")
-    : uut_("uut") {
-
-    //
-    resetter_.clk(clk_);
-    resetter_.rst(rst_);
-    //
-    sampler_.clk(clk_);
-    //
-    wd_.clk(clk_);
-
-    uut_.clk(clk_);
-    uut_.rst(rst_);
-#define __bind_ports(__name, __type)            \
-    uut_.__name(__name ## _);
-    PORTS(__bind_ports)
-#undef __bind_ports
-
-    SC_THREAD(t_stimulus);
-    SC_METHOD(m_sample);
-    sensitive << sampler_.sample();
-    dont_initialize();
+struct Expect {
+  friend std::ostream & operator<<(std::ostream & os, const Expect & res) {
+    return os << "'{e=" << res.y() << "}";
   }
-private:
-  void m_sample() {
-    if (!y_vld_r_)
-      return ;
-
-    const rtl_word_t r = applied_.front(); applied_.pop_front();
-    mdl_.add(convert(r));
-
-    LOGGER(DEBUG) << "EXPECTED=" << mdl_.word().to_string(SC_HEX)
-                  << " ACTUAL=" << y_r_.read().to_string(SC_HEX) << "\n";
-    LIBTB2_ERROR_ON(mdl_.word() != convert(y_r_));
+  friend bool operator==(const Expect & a, const Expect & b) {
+    return (a.y() == b.y());
   }
-  void t_stimulus() {
-    const libtb2::Options & o = libtb2::Sim::get_options();
+  Expect(rtl_word_t y) : y_(y) {}
+  rtl_word_t y() const { return y_; }
+ private:
+  rtl_word_t y_;
+};
 
-    resetter_.wait_reset_done();
+struct TOP : tb::Top {
+  using stimulus_type = Stimulus;
+  using expected_type = Expect;
 
-    struct x_constraint : scv_constraint_base {
-      scv_smart_ptr<rtl_word_t> w;
-      SCV_CONSTRAINT_CTOR(x_constraint) {
-        SCV_CONSTRAINT(w() < (1ll << 32));
-      }
-    } x("x_constraint");
-    
-    while (true) {
-      x.next();
-
-      pass_ = true;
-      x_ = *x.w;
-
-      applied_.push_back(*x.w);
-      wait(clk_.posedge_event());
-    }
+  TOP() {
+    v.rst(rst);
+    v.clk(clk);
+#define __bind_signals(__name, __type)          \
+    v.__name(__name);
+    PORTS(__bind_signals)
+#undef __bind_signals
+    start_tracing();
   }
-  std::deque<rtl_word_t> applied_;
-  sc_core::sc_clock clk_;
-  sc_core::sc_signal<bool> rst_;
+  ~TOP() {
+    stop_tracing();
+  }
+  void set_idle() {
+    pass = false;
+    clear = false;
+    x = rtl_word_t{};
+  }
+  void t_set_stimulus(const stimulus_type & stim) {
+    t_wait_not_busy();
+    pass = true;
+    x = stim.x();
+    t_await_cycles(1);
+    set_idle();
+  }
+  bool out_is_valid() const { return y_vld_r; }
+  Expect get_expect() const { return Expect{y_r}; }
+  void t_apply_reset() {
+    rst = true;
+    t_await_cycles(2);
+    rst = false;
+    t_await_cycles(2);
+  }
+  void t_wait_not_busy() {}
+  void t_await_cycles(std::size_t n = 1) {
+    while (n--)
+      wait(clk.negedge_event());
+  }
+  Vultra_wide_accumulator v{"ultra_wide_accumulator"};
+  ::sc_core::sc_signal<bool> rst{"rst"};
+  ::sc_core::sc_clock clk{"clk"};
 #define __declare_signal(__name, __type)        \
-  sc_core::sc_signal<__type> __name##_;
+  ::sc_core::sc_signal<__type> __name{#__name};
   PORTS(__declare_signal)
 #undef __declare_signal
-  libtb2::Resetter resetter_;
-  libtb2::Sampler sampler_;
-  libtb2::SimWatchDogCycles wd_;
-  AccumulatorModel mdl_;
-  uut_t uut_;
+ private:
+  void start_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    Verilated::traceEverOn(true);
+    vcd_ = std::make_unique<VerilatedVcdSc>();
+    v.trace(vcd_.get(), 99);
+    vcd_->open("sim.vcd");
+#endif
+  }
+  void stop_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    vcd_->close();
+#endif
+  }
+#ifdef OPT_ENABLE_TRACE
+  std::unique_ptr<VerilatedVcdSc> vcd_;
+#endif
 };
 
-int sc_main(int argc, char **argv) {
-  UltraWideAccumulatorTb tb;
-  return libtb2::Sim::start(argc, argv);
+namespace {
+
+TOP top;
+tb::TaskRunner TaskRunner;
+
+} // namespace
+
+struct Accumulator {
+  using bi_t = ::sc_dt::sc_biguint<128>;
+  
+  static bi_t to_bi(const rtl_word_t & w) {
+    return bi_t{w};
+  }
+  static rtl_word_t to_rtl(const bi_t & b) {
+    rtl_word_t r;
+    r.range(127, 64) = b.range(127, 64).to_uint64();
+    r.range(63, 0) = b.range(63, 0).to_uint64();
+    return r;
+  }
+  
+  Accumulator(const rtl_word_t & w) : bi_(Accumulator::to_bi(w)) {}
+  void apply(const rtl_word_t & x) {
+    bi_ = bi_ + Accumulator::to_bi(x);
+  }
+  rtl_word_t w() const { return Accumulator::to_rtl(bi_); }
+ private:
+  bi_t bi_;
+};
+
+TEST(UltraWideAccumulatorTest, Basic) {
+  const std::size_t n{1024 << 5};
+  auto task = std::make_unique<
+    tb::BasicPassValidNotBusyTask<TOP> >(top);
+
+  Accumulator acc{0};
+  scv_smart_ptr<uint32_t> v;
+  for (std::size_t i = 0; i < n; i++) {
+    const uint32_t x{*v};
+    rtl_word_t w{0};
+    w.range(31, 0) = x;
+    task->add_stimulus(w);
+    acc.apply(w);
+    task->add_expected(Expect{acc.w()});
+    v->next();
+  }
+  TaskRunner.set_task(std::move(task));
+  TaskRunner.run_until_exhausted(true);
 }
 
+int sc_main(int argc, char ** argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
+}
