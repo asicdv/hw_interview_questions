@@ -25,9 +25,9 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-`include "libtb2.vh"
+`include "libv_pkg.vh"
 
-module increment #(parameter int W = 32) (input [W-1:0] A, output logic fail);
+module fast_increment #(parameter int W = 32) (input [W-1:0] A, output logic fail);
   
   typedef logic [W-1:0] w_t;
 

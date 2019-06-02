@@ -25,4 +25,11 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-emit_answer(tb_multiply_by_21 multiply_by_21.sv multiply_by_21.cpp)
+emit_solution(
+  TARGET
+  tb_multiply_by_21
+  VTOP
+  multiply_by_21.sv
+  TB
+  multiply_by_21.cpp
+  )

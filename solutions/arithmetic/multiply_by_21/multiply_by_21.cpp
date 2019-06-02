@@ -25,55 +25,104 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-#include <libtb2.hpp>
+#include "libtb/libtb.hpp"
+#include <gtest/gtest.h>
 #include "vobj/Vmultiply_by_21.h"
 
-#define PORTS(__func)                           \
-  __func(a, T)                                  \
+using word_type = uint32_t;
+
+#define PORTS(__func)                            \
+  __func(a, word_type)                           \
   __func(fail, bool)
 
-typedef Vmultiply_by_21 uut_t;
-
-template<typename T>
-struct MultiplyBy21Tb : libtb2::Top<MultiplyBy21Tb<T> > {
-  SC_HAS_PROCESS(MultiplyBy21Tb);
-  MultiplyBy21Tb(sc_core::sc_module_name mn = "t")
-      : uut_("uut") {
-#define __bind_ports(__name, __type)            \
-    uut_.__name(__name ## _);
-    PORTS(__bind_ports)
-#undef __bind_ports
-    wd_.clk(clk_);
-
-    SC_METHOD(m_fail);
-    this->sensitive << fail_.posedge_event();
-    this->dont_initialize();
-    
-    SC_THREAD(t_stimulus);
+struct Stimulus {
+  friend std::ostream & operator<<(std::ostream & os, const Stimulus & stim) {
+    return os << "'{a=" << stim.a() << "}";
   }
+  Stimulus(word_type a) : a_(a) {}
+  word_type a() const { return a_; }
  private:
-  void m_fail() { LIBTB2_ERROR_ON(fail_); }
-  void t_stimulus() {
-    scv_smart_ptr<T> p;
-    while (true) {
-      wait(clk_.posedge_event());
-      p->next();
-      a_ = *p;
-
-      LOGGER(INFO) << "a=" << a_ << "\n";
-    }
-  }
-  sc_core::sc_clock clk_;
-#define __declare_signals(__name, __type)       \
-  sc_core::sc_signal<__type> __name ## _;
-  PORTS(__declare_signals)
-#undef __declare_signals
-  libtb2::SimWatchDogCycles wd_;
-  uut_t uut_;
+  word_type a_;
 };
-SC_MODULE_EXPORT(MultiplyBy21Tb<uint32_t>);
 
-int sc_main(int argc, char **argv) {
-  MultiplyBy21Tb<uint32_t> tb;
-  return libtb2::Sim::start(argc, argv);
+struct TOP : tb::Top {
+  using stimulus_type = Stimulus;
+
+  TOP() {
+#define __bind_signals(__name, __type)          \
+    v.__name(__name);
+    PORTS(__bind_signals)
+#undef __bind_signals
+    start_tracing();
+  }
+  ~TOP() {
+    stop_tracing();
+  }
+  void set_idle() {
+    a = word_type{};
+  }
+  void t_set_stimulus(const stimulus_type & stim) {
+    a = stim.a();
+    t_await_cycles(1);
+    set_idle();
+  }
+  bool is_fail() const { return fail; }
+  void t_await_cycles(std::size_t n = 1) {
+    while (n--)
+      wait(clk.negedge_event());
+  }
+  Vmultiply_by_21 v{"multiply_by_21"};
+  ::sc_core::sc_clock clk{"clk"};
+#define __declare_signal(__name, __type)        \
+  ::sc_core::sc_signal<__type> __name{#__name};
+  PORTS(__declare_signal)
+#undef __declare_signal
+ private:
+  void start_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    Verilated::traceEverOn(true);
+    vcd_ = std::make_unique<VerilatedVcdSc>();
+    v.trace(vcd_.get(), 99);
+    vcd_->open("sim.vcd");
+#endif
+  }
+  void stop_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    vcd_->close();
+#endif
+  }
+#ifdef OPT_ENABLE_TRACE
+  std::unique_ptr<VerilatedVcdSc> vcd_;
+#endif
+};
+
+namespace {
+
+TOP top;
+tb::TaskRunner TaskRunner;
+
+} // namespace
+
+TEST(MultiplyBy32Test, Basic) {
+  const std::size_t n{1024 << 5};
+  auto task = std::make_unique<tb::BasicNotFailTask<TOP> >(top);
+
+  struct stimulus_constraint : scv_constraint_base {
+    scv_smart_ptr<uint32_t> v;
+    SCV_CONSTRAINT_CTOR(stimulus_constraint) {
+      SCV_CONSTRAINT(v() < 1024);
+    }
+  } a_ptr("a_constrained");
+
+  for (std::size_t i = 0; i < n; i++) {
+    task->add_stimulus(Stimulus{*a_ptr.v});
+    a_ptr.next();
+  }
+  TaskRunner.set_task(std::move(task));
+  TaskRunner.run_until_exhausted(true);
+}
+
+int sc_main(int argc, char ** argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
 }

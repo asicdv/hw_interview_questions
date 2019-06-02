@@ -25,4 +25,11 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-emit_answer(tb_increment fast_increment.sv increment.cpp)
+emit_solution(
+  TARGET
+  tb_increment
+  VTOP
+  fast_increment.sv
+  TB
+  increment.cpp
+  )

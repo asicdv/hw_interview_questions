@@ -44,6 +44,60 @@ struct Task {
 };
 
 template<typename TOP>
+struct BasicNotFailTask : Task {
+  using stimulus_type = typename TOP::stimulus_type;
+
+  BasicNotFailTask(TOP & top) : top_(top) {}
+  bool is_completed() const override { return is_completed_; }
+  void add_stimulus(const stimulus_type & stim) {
+    stimulus_.push(stim);
+  }
+  void execute() override {
+    using namespace sc_core;
+
+    // Fork:
+    sc_process_handle h_stim =
+        sc_spawn(std::bind(&BasicNotFailTask::t_stimulus, this),
+                 "t_stimulus");
+
+    sc_spawn_options copts;
+    copts.set_sensitivity(&top_.clk.negedge_event());
+    copts.spawn_method();
+    copts.dont_initialize();
+
+    sc_process_handle h_check = 
+        sc_spawn(std::bind(&BasicNotFailTask::m_checker, this),
+                 "m_checker", &copts );
+
+    // Join:
+    wait(h_stim.terminated_event());
+    if (!h_check.terminated())
+      h_check.kill();
+  }
+ private:
+  void t_stimulus() {
+    top_.set_idle();
+    while (!stimulus_.empty() && !fail()) {
+      const stimulus_type & s{stimulus_.front()};
+      top_.t_set_stimulus(s);
+      stimulus_.pop();
+    }
+    top_.set_idle();
+    wait (100, ::sc_core::SC_NS);
+    is_completed_ = true; 
+  }
+  void m_checker() {
+    ASSERT_FALSE(top_.is_fail()) << "["
+                                 << ::sc_core::sc_time_stamp()
+                                 << "]: Fail Asserted!";
+  }
+  bool fail() const { return ::testing::Test::HasFatalFailure(); }
+  bool is_completed_{false};
+  std::queue<stimulus_type> stimulus_;
+  TOP & top_;
+};
+
+template<typename TOP>
 struct BasicPassValidNotBusyTask : Task {
   using stimulus_type = typename TOP::stimulus_type;
   using expected_type = typename TOP::expected_type;
@@ -98,8 +152,8 @@ struct BasicPassValidNotBusyTask : Task {
       const expected_type & tb_out{expected_.front()};
       const expected_type & rtl_out{top_.get_expect()};
       ASSERT_EQ(tb_out, rtl_out) << "["
-                               << ::sc_core::sc_time_stamp()
-                               << "]: Stimulus mismatch!"
+                                 << ::sc_core::sc_time_stamp()
+                                 << "]: Stimulus mismatch!"
                                  << " Expected: " << tb_out
                                  << " Actual: " << rtl_out;
       expected_.pop();
