@@ -147,7 +147,6 @@ struct Accumulator {
     r.range(63, 0) = b.range(63, 0).to_uint64();
     return r;
   }
-  
   Accumulator(const rtl_word_t & w) : bi_(Accumulator::to_bi(w)) {}
   void apply(const rtl_word_t & x) {
     bi_ = bi_ + Accumulator::to_bi(x);
