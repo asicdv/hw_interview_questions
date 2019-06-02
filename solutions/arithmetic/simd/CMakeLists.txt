@@ -25,4 +25,11 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-emit_answer(tb_simd simd.sv simd.cpp)
+emit_solution(
+  TARGET
+  tb_simd
+  VTOP
+  simd.sv
+  TB
+  simd.cpp
+  )

@@ -25,4 +25,11 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-emit_answer(tb_fused_multiply_add fused_multiply_add.sv fused_multiply_add.cpp)
+emit_solution(
+  TARGET
+  tb_fused_multiply_add
+  VTOP
+  fused_multiply_add.sv
+  TB
+  fused_multiply_add.cpp
+  )

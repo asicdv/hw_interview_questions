@@ -27,8 +27,8 @@
 
 add_subdirectory(multiplier)
 add_subdirectory(div_by_3)
-#add_subdirectory(fused_multiply_add)
+add_subdirectory(fused_multiply_add)
 #add_subdirectory(increment)
 #add_subdirectory(multiply_by_21)
-#add_subdirectory(simd)
+add_subdirectory(simd)
 #add_subdirectory(ultra_wide_accumulator)

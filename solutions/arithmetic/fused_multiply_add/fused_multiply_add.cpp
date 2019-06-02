@@ -25,203 +25,155 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-#include <libtb2.hpp>
+#include "libtb/libtb.hpp"
+#include <gtest/gtest.h>
 #include "vobj/Vfused_multiply_add.h"
+
+using in_type = uint32_t;
+using out_type = uint32_t;
 
 #define PORTS(__func)                           \
   __func(cntrl_load, bool)                      \
-  __func(cntrl_init, T)                         \
+  __func(cntrl_init, out_type)                  \
   __func(pass, bool)                            \
-  __func(m, T)                                  \
-  __func(x, T)                                  \
-  __func(c, T)                                  \
+  __func(m, in_type)                            \
+  __func(x, in_type)                            \
+  __func(c, in_type)                            \
   __func(y_valid_r, bool)                       \
-  __func(y_w, T)
+  __func(y_w, out_type)
 
-typedef Vfused_multiply_add uut_t;
 
-namespace opts {
-
-static int ACCUMULATION_N = 100;
-
-} // namespace opts
-
-template<typename T = uint32_t>
-struct Machine {
-  Machine() : y_(0) {}
-  void init(T i) { y_ = i; }
-  void apply(T m, T x, T c) {
-    y_ += (m * x) + c;
+struct Stimulus {
+  friend std::ostream & operator<<(std::ostream & os, const Stimulus & stim) {
+    return os << "'{m=" << stim.m() << ",x=" << stim.x() << ",c=" << stim.c() << "}";
   }
-  T y() const { return y_; }
+  Stimulus(in_type m, in_type x, in_type c) : m_(m), x_(x), c_(c) {}
+  in_type m() const { return m_; }
+  in_type x() const { return x_; }
+  in_type c() const { return c_; }
  private:
-  T y_;
+  in_type m_, x_, c_;
 };
 
-template<typename T>
-struct FusedMultiplyAddTransactorIntf : sc_core::sc_interface {
-  virtual void init(const T & t) = 0;
-  virtual void issue(const T & m, const T & x, const T & c) = 0;
-};
-
-template<typename T>
-struct FusedMultiplyAddTransactor
-    : FusedMultiplyAddTransactorIntf<T>, sc_core::sc_module {
-  //
-  sc_core::sc_in<bool> clk;
-  sc_core::sc_in<bool> rst;
-  //
-  sc_core::sc_out<bool> cntrl_load;
-  sc_core::sc_out<T> cntrl_init;
-  //
-  sc_core::sc_out<bool> pass;
-  sc_core::sc_out<T> m;
-  sc_core::sc_out<T> x;
-  sc_core::sc_out<T> c;
-  //
-  sc_core::sc_in<bool> y_valid_r;
-  sc_core::sc_in<T> y_w;
-
-  FusedMultiplyAddTransactor(sc_core::sc_module_name mn = "t")
-      : clk("clk"), rst("rst")
-#define __declare_ports(__name, __type)        \
-      , __name(#__name)
-      PORTS(__declare_ports)
-#undef __declare_ports
-  {}
-  void end_of_elaboration() { idle(); }
-  void init(const T & t) {
-    cntrl_load = true;
-    cntrl_init = t;
-    wait_posedge_clk();
-    idle();
+struct Expect {
+  friend std::ostream & operator<<(std::ostream & os, const Expect & res) {
+    return os << "'{e=" << res.y() << "}";
   }
-  void issue(const T & m_upt, const T & x_upt, const T & c_upt) {
-    pass = true;
-    m = m_upt;
-    x = x_upt;
-    c = c_upt;
-    wait_posedge_clk();
-    idle();
+  friend bool operator==(const Expect & a, const Expect & b) {
+    return a.y() == b.y();
   }
+  Expect(out_type y) : y_(y) {}
+  out_type y() const { return y_; }
  private:
-  void wait_posedge_clk() { wait(clk.posedge_event()); }
-  void idle() {
-    //
-    cntrl_load = false;
-    cntrl_init = T();
-    //
-    pass = false;
-    m = T();
-    x = T();
-    c = T();
-  }
+  out_type y_;
 };
 
-struct FusedMultiplyAddTb : libtb2::Top<FusedMultiplyAddTb> {
-  typedef uint32_t T;
+struct TOP : tb::Top {
+  using stimulus_type = Stimulus;
+  using expected_type = Expect;
   
-  sc_core::sc_port<FusedMultiplyAddTransactorIntf<T> > p;
-  SC_HAS_PROCESS(FusedMultiplyAddTb);
-  FusedMultiplyAddTb(sc_core::sc_module_name mn = "t")
-      : uut_("uut")
-      , rst_("rst")
-      , clk_("clk")
-      , p("p")
-#define __construct_ports(__name, __type)       \
-      , __name ## _(#__name)
-      PORTS(__construct_ports)
-#undef __construct_ports
-  {
-    resetter_.clk(clk_);
-    resetter_.rst(rst_);
-    //
-    xact_.clk(clk_);
-    xact_.rst(rst_);
-    p.bind(xact_);
-
-    //
-    uut_.clk(clk_);
-    uut_.rst(rst_);
-    
-#define __bind_ports(__name, __type)            \
-    xact_.__name(__name ## _);                  \
-    uut_.__name(__name ## _);
-    PORTS(__bind_ports)
-#undef __bind_ports
-    wd_.clk(clk_);
-    sampler_.clk(clk_);
-
-    SC_THREAD(t_stimulus);
-    SC_METHOD(m_model);
-    sensitive << sampler_.sample();
-    dont_initialize();
+  TOP() {
+    v.rst(rst);
+    v.clk(clk);
+#define __bind_signals(__name, __type)          \
+    v.__name(__name);
+    PORTS(__bind_signals)
+#undef __bind_signals
+    start_tracing();
   }
+  ~TOP() {
+    stop_tracing();
+  }
+  void set_idle() {
+    pass = false;
+    m = in_type{};
+    x = in_type{};
+    c = in_type{};
+  }
+  bool out_is_valid() const { return y_valid_r; }
+  void t_set_stimulus(const stimulus_type & stim) {
+    t_wait_not_busy();
+    pass = true;
+    m = stim.m();
+    x = stim.x();
+    c = stim.c();
+    t_await_cycles(1);
+    set_idle();
+  }
+  Expect get_expect() const { return Expect{y_w}; }
+  void t_apply_reset() {
+    rst = true;
+    t_await_cycles(2);
+    rst = false;
+    t_await_cycles(2);
+  }
+  void t_wait_not_busy() {}
+  void t_await_cycles(std::size_t n = 1) {
+    while (n--)
+      wait(clk.negedge_event());
+  }
+  Vfused_multiply_add v{"fused_multiply_add"};
+  ::sc_core::sc_signal<bool> rst{"rst"};
+  ::sc_core::sc_clock clk{"clk"};
+#define __declare_signal(__name, __type)        \
+  ::sc_core::sc_signal<__type> __name{#__name};
+  PORTS(__declare_signal)
+#undef __declare_signal
  private:
-  void t_stimulus() {
-    scv_smart_ptr<bool> pass_;
-    struct cntrl_init_constraint : scv_constraint_base {
-      scv_smart_ptr<T> p;
-      SCV_CONSTRAINT_CTOR(cntrl_init_constraint) {
-        SCV_CONSTRAINT((p() >= 0) && (p() < 10000));
-      }
-    };
-    cntrl_init_constraint cntrl_init_c("cntrl_init_constraint");
-    struct x_constraint : scv_constraint_base {
-      scv_smart_ptr<T> p;
-      SCV_CONSTRAINT_CTOR(x_constraint) {
-        SCV_CONSTRAINT((p() >= 0) && (p() < 1000));
-      }
-    } m_c("m_c"), x_c("x_c"), c_c("c_c");
-
-    resetter_.wait_reset_done();
-
-    while (true) {
-      cntrl_init_c.next();
-      const T cntrl_init = *cntrl_init_c.p;
-
-      LOGGER(INFO) << "Loading MAC, init=" << cntrl_init << "\n";
-      p->init(cntrl_init);
-      for (int i = 0; i < opts::ACCUMULATION_N; i++) {
-        m_c.next(); x_c.next(); c_c.next();
-
-        const T m = *m_c.p;
-        const T x = *x_c.p;
-        const T c = *c_c.p;
-
-        LOGGER(INFO) << "m = " << m << " x = " << x << " c = " << c << "\n";
-        p->issue(m, x, c);
-      }
-    }
+  void start_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    Verilated::traceEverOn(true);
+    vcd_ = std::make_unique<VerilatedVcdSc>();
+    v.trace(vcd_.get(), 99);
+    vcd_->open("sim.vcd");
+#endif
   }
-  void m_model() {
-    if (y_valid_r_) {
-      // Validate output
-      const T actual = y_w_;
-      const T expected = mdl_.y();
-      LIBTB2_ERROR_ON(actual != expected);
-
-      LOGGER(DEBUG) << "actual = " << actual  << " expected = " << expected << "\n";
-    }
-    if (cntrl_load_) { mdl_.init(cntrl_init_); }
-    if (pass_) { mdl_.apply(m_, x_, c_); }
+  void stop_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    vcd_->close();
+#endif
   }
-  Machine<T> mdl_;
-  FusedMultiplyAddTransactor<T> xact_;
-  sc_core::sc_clock clk_;
-  sc_core::sc_signal<bool> rst_;
-#define __declare_signals(__name, __type)       \
-  sc_core::sc_signal<__type> __name ## _;
-  PORTS(__declare_signals)
-#undef __declare_signals
-  libtb2::Resetter resetter_;
-  libtb2::Sampler sampler_;
-  libtb2::SimWatchDogCycles wd_;
-  uut_t uut_;
+#ifdef OPT_ENABLE_TRACE
+  std::unique_ptr<VerilatedVcdSc> vcd_;
+#endif
 };
-SC_MODULE_EXPORT(FusedMultiplyAddTb);
 
-int sc_main(int argc, char **argv) {
-  FusedMultiplyAddTb tb;
-  return libtb2::Sim::start(argc, argv);
+namespace {
+
+TOP top;
+tb::TaskRunner TaskRunner;
+
+} // namespace
+
+TEST(FusedMultiplyAddTest, Basic) {
+  const std::size_t n{1024 << 5};
+  auto task = std::make_unique<
+    tb::BasicPassValidNotBusyTask<TOP> >(top);
+
+  struct x_constraint : scv_constraint_base {
+    scv_smart_ptr<in_type> p;
+    SCV_CONSTRAINT_CTOR(x_constraint) {
+      SCV_CONSTRAINT((p() >= 0) && (p() < (1 << 8) - 1));
+    }
+  } m_c("m_constrained"), x_c("x_constrained"), c_c("c_constrained");
+
+  out_type sum{0};
+  for (std::size_t i = 0; i < n; i++) {
+    const in_type m{*m_c.p};
+    const in_type x{*x_c.p};
+    const in_type c{*c_c.p};
+
+    task->add_stimulus(Stimulus{m, x, c});
+
+    sum += (m * x) + c;
+    task->add_expected(Expect{sum});
+    x_c.next();
+  }
+  TaskRunner.set_task(std::move(task));
+  TaskRunner.run_until_exhausted(true);
+}
+
+int sc_main(int argc, char ** argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
 }
