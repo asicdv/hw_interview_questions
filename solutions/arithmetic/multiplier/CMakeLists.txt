@@ -25,5 +25,17 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-add_subdirectory(libtb2)
-add_subdirectory(libv2)
+generate_csa(9 32)
+generate_csa(3 64)
+
+emit_solution(
+  TARGET
+  tb_multiplier
+  VTOP
+  multiplier.sv
+  TB
+  multiplier.cpp
+  DEPS
+  csa_N9_32b
+  csa_N3_64b
+  )

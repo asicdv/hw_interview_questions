@@ -1,5 +1,5 @@
 ##========================================================================== //
-## Copyright (c) 2016-2018, Stephen Henry
+## Copyright (c) 2016-2019, Stephen Henry
 ## All rights reserved.
 ##
 ## Redistribution and use in source and binary forms, with or without
@@ -25,31 +25,11 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-cmake_minimum_required(VERSION 3.5)
-project(hw_interview_questions)
-
-set(CMAKE_CXX_STANDARD 14)
-
-option(OPT_TESTS_EN "Enable unit tests." ON)
-option(OPT_REBUILD_LIBV "Invoke the build scripts for LIBV." OFF)
-
-add_subdirectory(third_party)
-
-list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
-include(${CMAKE_SOURCE_DIR}/cmake/hw.cmake)
-
-if (OPT_TESTS_EN)
-  enable_testing()
-endif ()
-
-find_package(Vivado)
-find_package(PythonInterp)
-find_package(SystemC)
-find_package(Verilator)
-build_verilator()
-
-add_subdirectory(libtb)
-add_subdirectory(libv)
-include_directories(${CMAKE_SOURCE_DIR})
-
-add_subdirectory(solutions)
+add_subdirectory(arithmetic)
+#add_subdirectory(clocking)
+#add_subdirectory(control)
+#add_subdirectory(design)
+#add_subdirectory(memory)
+#add_subdirectory(pipelines)
+#add_subdirectory(problem_solving)
+#add_subdirectory(queues)

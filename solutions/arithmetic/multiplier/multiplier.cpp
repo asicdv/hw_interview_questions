@@ -25,20 +25,12 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-#define SC_INCLUDE_DYNAMIC_PROCESSES
-#include <systemc>
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored  "-Wnull-dereference"
-#include <scv.h>
-#pragma GCC diagnostic pop
+#include "libtb/libtb.hpp"
 #include <gtest/gtest.h>
 #include <queue>
 #include <sstream>
 #include <functional>
 #include "vobj/Vmultiplier.h"
-#ifdef TB_ENABLE_TRACING
-#  include "verilated_vcd_sc.h"
-#endif
 
 using word_type = uint32_t;
 using result_type = vluint64_t;
@@ -132,44 +124,10 @@ static struct TOP {
 #endif
 } TOP;
 
-struct Task {
-  virtual ~Task() {}
-  virtual bool is_completed() const { return false; }
-  virtual void execute() = 0;
-};
-
-static class TaskRunner : public ::sc_core::sc_module {
- public:
-  SC_HAS_PROCESS(TaskRunner);
-  TaskRunner() : ::sc_core::sc_module{::sc_core::sc_module_name{"TaskRunner"}} {
-    SC_THREAD(t_stimulus);
-  }
-  void set_task(std::unique_ptr<Task> && task) { task_ = std::move(task); }
-  void run_until_exhausted(bool do_stop = false) {
-    e_start_tb_.notify(1, SC_NS);
-    while (!task_->is_completed())
-      ::sc_core::sc_start(10, SC_US);
-    if (do_stop)
-      ::sc_core::sc_stop();
-  }
-
- private:
-  void t_stimulus() {
-    while (true) {
-      wait(e_start_tb_);
-      t_main_loop();
-    }
-  }
-  void t_main_loop() {
-    if (task_)
-      task_->execute();
-  }
-  ::sc_core::sc_event e_start_tb_;
-  std::unique_ptr<Task> task_;
-} TaskRunner;
+namespace { tb::TaskRunner TaskRunner; } // namespace
 
 TEST(MultiplierTest, Basic) {
-  struct BasicTask : Task {
+  struct BasicTask : tb::Task {
     explicit BasicTask(std::size_t n = 10)
         : n_(n) {}
     void execute() override {

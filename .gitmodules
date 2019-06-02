@@ -1,9 +1,3 @@
-[submodule "contrib/libv2"]
-	path = contrib/libv2
-	url = git@github.com:stephenry/libv2.git
-[submodule "contrib/libtb2"]
-	path = contrib/libtb2
-	url = git@github.com:stephenry/libtb2.git
 [submodule "third_party/googletest"]
 	path = third_party/googletest
 	url = https://github.com/google/googletest.git

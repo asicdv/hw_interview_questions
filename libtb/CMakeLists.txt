@@ -1,5 +1,5 @@
 ##========================================================================== //
-## Copyright (c) 2016-2018, Stephen Henry
+## Copyright (c) 2016-2019, Stephen Henry
 ## All rights reserved.
 ##
 ## Redistribution and use in source and binary forms, with or without
@@ -25,10 +25,5 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-add_subdirectory(div_by_3)
-add_subdirectory(fused_multiply_add)
-add_subdirectory(increment)
-add_subdirectory(multiply_by_21)
-add_subdirectory(simd)
-add_subdirectory(ultra_wide_accumulator)
-add_subdirectory(multiplier)
+add_library(tb SHARED task.cpp)
+target_link_libraries(tb ${SystemC_LIB})

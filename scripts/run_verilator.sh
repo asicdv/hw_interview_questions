@@ -1,5 +1,5 @@
 ##========================================================================== //
-## Copyright (c) 2016, Stephen Henry
+## Copyright (c) 2018, Stephen Henry
 ## All rights reserved.
 ##
 ## Redistribution and use in source and binary forms, with or without
@@ -25,4 +25,9 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-emit_answer(tb_multiplier multiplier.sv multiplier.cpp)
+# Invoke Verilator
+#
+${VERILATOR_EXE} ${verilator_opts} ${vinclude_path} -sc -Mdir vobj ${top}
+make -C${CMAKE_CURRENT_BINARY_DIR}/vobj -f "V${top}.mk"
+
+exit 0
