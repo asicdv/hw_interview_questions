@@ -26,10 +26,12 @@
 //========================================================================== //
 
 #include "tb.hpp"
+#include "random.hpp"
 
 namespace tb {
 
 void initialize(int argc, char **argv) {
+  Random::set_seed(1);
 }
 
 }
