@@ -25,7 +25,7 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-#add_subdirectory(count_ones)
+add_subdirectory(count_ones)
 #add_subdirectory(count_zeros_32)
 #add_subdirectory(detect_sequence)
 #add_subdirectory(fibonacci)

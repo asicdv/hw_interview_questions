@@ -103,7 +103,7 @@ tb::TaskRunner TaskRunner;
 
 } // namespace
 
-TEST(MultiplyBy32Test, Basic) {
+TEST(IncrementTest, Basic) {
   const std::size_t n{1024 << 5};
   auto task = std::make_unique<tb::BasicNotFailTask<TOP> >(top);
 
