@@ -25,4 +25,11 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-emit_answer(tb_count_zeros_32 count_zeros_32.sv count_zeros_32.cpp)
+emit_solution(
+  TARGET
+  tb_count_zeros_32
+  VTOP
+  count_zeros_32.sv
+  TB
+  count_zeros_32.cpp
+  )

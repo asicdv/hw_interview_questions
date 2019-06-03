@@ -26,7 +26,7 @@
 ##========================================================================== //
 
 add_subdirectory(count_ones)
-#add_subdirectory(count_zeros_32)
+add_subdirectory(count_zeros_32)
 #add_subdirectory(detect_sequence)
 #add_subdirectory(fibonacci)
 #add_subdirectory(missing_duplicated_word)

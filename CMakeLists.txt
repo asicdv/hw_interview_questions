@@ -55,3 +55,4 @@ add_subdirectory(libv)
 include_directories(${CMAKE_SOURCE_DIR})
 
 add_subdirectory(solutions)
+add_subdirectory(tests)

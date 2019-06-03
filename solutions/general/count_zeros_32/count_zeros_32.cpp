@@ -25,98 +25,135 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-#include <libtb2.hpp>
-#include <deque>
+#include "libtb/libtb.hpp"
+#include "libtb/verilator.hpp"
+#include <gtest/gtest.h>
 #include "vobj/Vcount_zeros_32.h"
+
+using word_type = uint32_t;
+using result_type = uint32_t;
 
 #define PORTS(__func)                           \
   __func(pass, bool)                            \
-  __func(x, T)                                  \
+  __func(x, word_type)                          \
   __func(valid_r, bool)                         \
-  __func(y, T)
+  __func(y, word_type)
 
-typedef Vcount_zeros_32 uut_t;
-
-template<typename T>
-struct CountZeros32Tb : libtb2::Top<T> {
-  SC_HAS_PROCESS(CountZeros32Tb);
-  CountZeros32Tb(sc_module_name mn = "t")
-    : uut_("uut") {
-    //
-    uut_.clk(clk_);
-    uut_.rst(rst_);
-#define __bind_ports(__name, __type)            \
-    uut_.__name(__name ## _);
-    PORTS(__bind_ports)
-#undef __bind_ports
-    //
-    resetter_.clk(clk_);
-    resetter_.rst(rst_);
-    //
-    sampler_.clk(clk_);
-    //
-    wd_.clk(clk_);
-    //
-    SC_THREAD(t_stimulus);
-    //
-    SC_METHOD(m_checker);
-    this->sensitive << sampler_.sample();
-    this->dont_initialize();
-    //
-    st_.reset();
+struct Stimulus {
+  friend std::ostream & operator<<(std::ostream & os, const Stimulus & stim) {
+    return os << "'{a=" << stim.a() << "}";
   }
-  void end_of_simulation() {
-    LOGGER(INFO) << "Samples processed=" << st_.n << "\n";
-  }
-private:
-  void m_checker() {
-    const libtb2::Options & o = libtb2::Sim::get_options();
-
-    if (!valid_r_)
-      return ;
-
-    const T d = d_.front(); d_.pop_front();
-    const std::size_t zeros = libtb2::popcount(~d);
-    LIBTB2_ERROR_ON(zeros != y_);
-
-    if (o.debug_on()) {
-      LOGGER(DEBUG) << "x = " << x_
-                    << " actual = " << y_
-                    << " expected = " << zeros
-                    << "\n";
-    }
-  }
-  void t_stimulus() {
-    resetter_.wait_reset_done();
-
-    scv_smart_ptr<T> p;
-    while (true) {
-      p->next();
-
-      pass_ = true;
-      x_ = *p;
-      d_.push_back(*p);
-      wait(clk_.posedge_event());
-    }
-  }
-  struct {
-    void reset() { n = 0; }
-    std::size_t n;
-  } st_;
-  sc_core::sc_clock clk_;
-  sc_core::sc_signal<bool> rst_;
-#define __declare_signals(__name, __type)       \
-  sc_core::sc_signal<__type> __name ## _;
-  PORTS(__declare_signals)
-#undef __declare_signals
-  libtb2::Resetter resetter_;
-  libtb2::Sampler sampler_;
-  libtb2::SimWatchDogCycles wd_;
-  std::deque<T> d_;
-  uut_t uut_;
+  Stimulus(word_type a) : a_(a) {}
+  word_type a() const { return a_; }
+ private:
+  word_type a_;
 };
 
-int sc_main(int argc, char **argv) {
-  CountZeros32Tb<uint32_t> tb;
-  return libtb2::Sim::start(argc, argv);
+struct Expect {
+  friend std::ostream & operator<<(std::ostream & os, const Expect & res) {
+    return os << "'{e=" << res.y() << "}";
+  }
+  friend bool operator==(const Expect & a, const Expect & b) {
+    return (a.y() == b.y());
+  }
+  Expect(result_type y) : y_(y) {}
+  result_type y() const { return y_; }
+ private:
+  result_type y_;
+};
+
+struct TOP : tb::Top {
+  using stimulus_type = Stimulus;
+  using expected_type = Expect;
+
+  TOP() {
+    v.rst(rst);
+    v.clk(clk);
+#define __bind_signals(__name, __type)          \
+    v.__name(__name);
+    PORTS(__bind_signals)
+#undef __bind_signals
+    start_tracing();
+  }
+  ~TOP() {
+    stop_tracing();
+  }
+  void set_idle() {
+    pass = false;
+    x = word_type{};
+  }
+  void t_set_stimulus(const stimulus_type & stim) {
+    t_wait_not_busy();
+    pass = true;
+    x = stim.a();
+    t_await_cycles(1);
+    set_idle();
+  }
+  bool out_is_valid() const { return valid_r; }
+  Expect get_expect() const { return Expect{y}; }
+  void t_apply_reset() {
+    rst = true;
+    t_await_cycles(2);
+    rst = false;
+    t_await_cycles(2);
+  }
+  void t_wait_not_busy() {}
+  void t_await_cycles(std::size_t n = 1) {
+    while (n--)
+      wait(clk.negedge_event());
+  }
+  Vcount_zeros_32 v{"count_zeros_32"};
+  ::sc_core::sc_signal<bool> rst{"rst"};
+  ::sc_core::sc_clock clk{"clk"};
+#define __declare_signal(__name, __type)        \
+  ::sc_core::sc_signal<__type> __name{#__name};
+  PORTS(__declare_signal)
+#undef __declare_signal
+ private:
+  void start_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    Verilated::traceEverOn(true);
+    vcd_ = std::make_unique<VerilatedVcdSc>();
+    v.trace(vcd_.get(), 99);
+    vcd_->open("sim.vcd");
+#endif
+  }
+  void stop_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    vcd_->close();
+#endif
+  }
+#ifdef OPT_ENABLE_TRACE
+  std::unique_ptr<VerilatedVcdSc> vcd_;
+#endif
+};
+
+namespace {
+
+TOP top;
+tb::TaskRunner TaskRunner;
+
+} // namespace
+
+TEST(CountOnes32Test, Basic) {
+  const std::size_t n{1024 << 3};
+  auto task = std::make_unique<
+    tb::BasicPassValidNotBusyTask<TOP> >(top);
+
+  tb::Random::UniformRandomInterval<uint32_t> rnd{1024};
+  for (std::size_t i = 0; i < n; i++) {
+    const Stimulus stim{rnd()};
+    const Expect expect{static_cast<result_type>(
+        tb::pop_count(~stim.a()))};
+    task->add_stimulus(stim);
+    task->add_expected(expect);
+  }
+  TaskRunner.set_task(std::move(task));
+  TaskRunner.run_until_exhausted(true);
+}
+
+int sc_main(int argc, char ** argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  ::tb::initialize(argc, argv);
+  return RUN_ALL_TESTS();
 }

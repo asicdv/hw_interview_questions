@@ -26,6 +26,7 @@
 //========================================================================== //
 
 #include "libtb/libtb.hpp"
+#include "libtb/verilator.hpp"
 #include <gtest/gtest.h>
 #include "vobj/Vcount_ones.h"
 
