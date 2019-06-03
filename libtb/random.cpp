@@ -1,5 +1,5 @@
 //========================================================================== //
-// Copyright (c) 2017, Stephen Henry
+// Copyright (c) 2019, Stephen Henry
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -25,10 +25,12 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-#ifndef __OPTIONS_HPP__
-#define __OPTIONS_HPP__
+#include "random.hpp"
 
-#cmakedefine OPT_ENABLE_TRACE
-#cmakedefine OPT_ENABLE_SCV
+namespace tb {
 
-#endif
+std::random_device Random::rd_;
+
+std::size_t Random::seed_;
+
+} // namespace tb

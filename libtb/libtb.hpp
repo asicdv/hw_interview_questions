@@ -32,14 +32,18 @@
 
 #define SC_INCLUDE_DYNAMIC_PROCESSES
 #include <systemc>
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored  "-Wnull-dereference"
-#include <scv.h>
-#pragma GCC diagnostic pop
+#ifdef OPT_ENABLE_SCV
+#  pragma GCC diagnostic push
+#  pragma GCC diagnostic ignored  "-Wnull-dereference"
+#  include <scv.h>
+#  pragma GCC diagnostic pop
+#endif
 #ifdef OPT_ENABLE_TRACE
 #  include "verilated_vcd_sc.h"
 #endif
 
+#include "tb.hpp"
 #include "task.hpp"
+#include "random.hpp"
 
 #endif

@@ -33,6 +33,7 @@ set(CMAKE_CXX_STANDARD 14)
 option(OPT_TESTS_EN "Enable unit tests." ON)
 option(OPT_REBUILD_LIBV "Invoke the build scripts for LIBV." OFF)
 option(OPT_ENABLE_TRACE "Enable waveform tracing." ON)
+option(OPT_ENABLE_SCV "Enable SystemC Verification Library." OFF)
 
 add_subdirectory(third_party)
 

@@ -147,18 +147,12 @@ TEST(DivBy3Test, Basic) {
   auto task = std::make_unique<
     tb::BasicPassValidNotBusyTask<TOP> >(top);
 
-  struct x_constraint : scv_constraint_base {
-    scv_smart_ptr<uint32_t> p;
-    SCV_CONSTRAINT_CTOR(x_constraint) {
-      SCV_CONSTRAINT((p() >= 0) && (p() < (1 << 16) - 1));
-    }
-  } x_c("x_constrained");
-
+  tb::Random::UniformRandomInterval<uint32_t> rnd{1 << 16};
   for (std::size_t i = 0; i < n; i++) {
-    const Stimulus stim{*x_c.p};
+    const Stimulus stim{rnd()};
     task->add_stimulus(stim);
     task->add_expected(Expect{stim.x() / 3});
-    x_c.next();
+
   }
   TaskRunner.set_task(std::move(task));
   TaskRunner.run_until_exhausted(true);

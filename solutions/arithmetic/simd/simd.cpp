@@ -39,14 +39,27 @@ using word_type = uint32_t;
   __func(Y_r, word_type)                        \
   __func(valid_r, bool)
 
-enum OpT { OP_SEL0 = 0,
-    OP_SEL1, OP_ADD32, OP_SUB32, OP_ADD16, OP_SUB16,
-    OP_ADD8, OP_SUB8, OP_ADDSUB16, OP_SUBADD16, OP_ADDSUB8,
-    OP_SUBADD8
+#define OPS(__func)                             \
+  __func(OP_SEL0)                               \
+  __func(OP_SEL1)                               \
+  __func(OP_ADD32)                              \
+  __func(OP_SUB32)                              \
+  __func(OP_ADD16)                              \
+  __func(OP_SUB16)                              \
+  __func(OP_ADD8)                               \
+  __func(OP_SUB8)                               \
+  __func(OP_ADDSUB16)                           \
+  __func(OP_SUBADD16)                           \
+  __func(OP_ADDSUB8)                            \
+  __func(OP_SUBADD8)
+
+enum OpT {
+#define __declare_enum(op) op,
+  OPS(__declare_enum)
+#undef __declare_enum
 };
 
 struct Stimulus {
-  friend struct scv_extensions<Stimulus>;
   friend std::ostream & operator<<(std::ostream & os, const Stimulus & stim) {
     return os << "'{a=" << stim.a() << "}";
   }
@@ -73,51 +86,11 @@ struct Expect {
   word_type y_;
 };
 
-template<>
-struct scv_extensions<OpT> : scv_enum_base<OpT> {
-  SCV_ENUM_CTOR(OpT) {
-    SCV_ENUM(OP_SEL0);
-    SCV_ENUM(OP_SEL1);
-    SCV_ENUM(OP_ADD32);
-    SCV_ENUM(OP_SUB32);
-    SCV_ENUM(OP_ADD16);
-    SCV_ENUM(OP_SUB16);
-    SCV_ENUM(OP_ADD8);
-    SCV_ENUM(OP_SUB8);
-    SCV_ENUM(OP_ADDSUB16);
-    SCV_ENUM(OP_SUBADD16);
-    SCV_ENUM(OP_ADDSUB8);
-    SCV_ENUM(OP_SUBADD8);
-  }
-};
-
-template<>
-struct scv_extensions<Stimulus> : scv_extensions_base<Stimulus> {
-  scv_extensions<OpT> op_;
-  scv_extensions<word_type> a_, b_;
-  SCV_EXTENSIONS_CTOR(Stimulus) {
-    SCV_FIELD(op_);
-    SCV_FIELD(a_);
-    SCV_FIELD(b_);
-  }
-};
-
 const char * to_string(const OpT op) {
   switch (op) {
-#define _stringify(OP) case OP: return #OP; break;
-    _stringify(OP_SEL0)
-    _stringify(OP_SEL1)
-    _stringify(OP_ADD32)
-    _stringify(OP_SUB32)
-    _stringify(OP_ADD16)
-    _stringify(OP_SUB16)
-    _stringify(OP_ADDSUB16)
-    _stringify(OP_SUBADD16)
-    _stringify(OP_ADD8)
-    _stringify(OP_SUB8)
-    _stringify(OP_ADDSUB8)
-    _stringify(OP_SUBADD8)
-#undef _stringify
+#define __stringify(__op) case __op: return #__op; break;
+    OPS(__stringify)
+#undef __stringify
   }
   return "<Invalid Op>";
 }
@@ -278,18 +251,18 @@ TEST(SIMDTest, Basic) {
   auto task = std::make_unique<
     tb::BasicPassValidNotBusyTask<TOP> >(top);
 
-  scv_smart_ptr<Stimulus> pstimulus;
-  scv_bag<OpT> opts;
-  for (int op = OP_SEL0; op != OP_SUBADD8; op++)
-    opts.add(static_cast<OpT>(op), 10);
-  pstimulus->op_.set_mode(opts);
-  
+  tb::Random::UniformRandomInterval<word_type> rnd;
+  tb::Random::Bag<OpT> opbag;
+#define __op_add_to_bag(op) opbag.add(op, false);
+  OPS(__op_add_to_bag)
+#undef __op_add_to_bag
+  opbag.finalize();
+
   for (std::size_t i = 0; i < n; i++) {
-    const Stimulus stim{*pstimulus};
+    const Stimulus stim{opbag(), rnd(), rnd()};
+
     task->add_stimulus(stim);
     task->add_expected(SIMDEngine::compute(stim));
-
-    pstimulus->next();
   }
   TaskRunner.set_task(std::move(task));
   TaskRunner.run_until_exhausted(true);

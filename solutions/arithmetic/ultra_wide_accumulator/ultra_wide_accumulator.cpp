@@ -162,15 +162,14 @@ TEST(UltraWideAccumulatorTest, Basic) {
     tb::BasicPassValidNotBusyTask<TOP> >(top);
 
   Accumulator acc{0};
-  scv_smart_ptr<uint32_t> v;
+  tb::Random::UniformRandomInterval<uint32_t> rnd{1024};
   for (std::size_t i = 0; i < n; i++) {
-    const uint32_t x{*v};
+    const uint32_t x{rnd()};
     rtl_word_t w{0};
     w.range(31, 0) = x;
     task->add_stimulus(w);
     acc.apply(w);
     task->add_expected(Expect{acc.w()});
-    v->next();
   }
   TaskRunner.set_task(std::move(task));
   TaskRunner.run_until_exhausted(true);

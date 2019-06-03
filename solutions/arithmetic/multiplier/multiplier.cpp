@@ -149,19 +149,12 @@ TEST(MultiplierTest, Basic) {
   const std::size_t n{1024 << 3};
   auto task = std::make_unique<
     tb::BasicPassValidNotBusyTask<TOP> >(top);
-  struct stimulus_constraint : scv_constraint_base {
-    scv_smart_ptr<uint32_t> v;
-    SCV_CONSTRAINT_CTOR(stimulus_constraint) {
-      SCV_CONSTRAINT(v() < 1024);
-    }
-  } a_ptr("a_constrained"), b_ptr("b_constrained");
 
+  tb::Random::UniformRandomInterval<uint32_t> rnd{1024};
   for (std::size_t i = 0; i < n; i++) {
-    const Stimulus stim{*a_ptr.v, *b_ptr.v};
+    const Stimulus stim{rnd(), rnd()};
     task->add_stimulus(stim);
     task->add_expected(Expect{stim.a() * stim.b()});
-    a_ptr.next();
-    b_ptr.next();
   }
   TaskRunner.set_task(std::move(task));
   TaskRunner.run_until_exhausted(true);
@@ -169,5 +162,6 @@ TEST(MultiplierTest, Basic) {
 
 int sc_main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
+  ::tb::initialize(argc, argv);
   return RUN_ALL_TESTS();
 }

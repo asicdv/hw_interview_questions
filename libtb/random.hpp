@@ -1,5 +1,5 @@
 //========================================================================== //
-// Copyright (c) 2017, Stephen Henry
+// Copyright (c) 2019, Stephen Henry
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -25,10 +25,63 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-#ifndef __OPTIONS_HPP__
-#define __OPTIONS_HPP__
+#ifndef __RANDOM_HPP__
+#define __RANDOM_HPP__
 
-#cmakedefine OPT_ENABLE_TRACE
-#cmakedefine OPT_ENABLE_SCV
+#include <random>
+#include <limits>
+#include <random>
+
+namespace tb {
+
+struct Random {
+  template <typename T>
+  struct UniformRandomInterval {
+    UniformRandomInterval(T hi = std::numeric_limits<T>::max(),
+                          T lo = std::numeric_limits<T>::min())
+        : hi_(hi), lo_(lo) {
+      mt_ = std::mt19937{Random::rd_()};
+      dst_ = std::uniform_int_distribution<T>(lo_, hi_);
+    }
+
+    T lo() const { return lo_; }
+    T hi() const { return hi_; }
+    T operator()() { return dst_(mt_); }
+
+   private:
+    std::mt19937 mt_;
+    std::uniform_int_distribution<T> dst_;
+    T lo_, hi_;
+  };
+
+  template<typename T>
+  struct Bag {
+    explicit Bag() {};
+    void add(const T & t, bool do_finalize = true) {
+      v_.push_back(t);
+      if (do_finalize)
+        finalize();
+    }
+    template<typename FwdIt>
+    void add(FwdIt begin, FwdIt end) {
+      for (FwdIt it = begin; it != end; ++it)
+        add(*it);
+      finalize();
+    }
+    void finalize() { r_ = UniformRandomInterval<std::size_t>{v_.size() - 1}; }
+    T operator()() { return v_[r_()]; }
+   private:
+    UniformRandomInterval<std::size_t> r_;
+    std::vector<T> v_;
+  };
+
+  static void set_seed(std::size_t seed) { Random::seed_ = seed; }
+
+ private:
+  static std::random_device rd_;
+  static std::size_t seed_;
+};
+
+} // namespace tb
 
 #endif

@@ -150,24 +150,17 @@ TEST(FusedMultiplyAddTest, Basic) {
   auto task = std::make_unique<
     tb::BasicPassValidNotBusyTask<TOP> >(top);
 
-  struct x_constraint : scv_constraint_base {
-    scv_smart_ptr<in_type> p;
-    SCV_CONSTRAINT_CTOR(x_constraint) {
-      SCV_CONSTRAINT((p() >= 0) && (p() < (1 << 8) - 1));
-    }
-  } m_c("m_constrained"), x_c("x_constrained"), c_c("c_constrained");
-
   out_type sum{0};
+  tb::Random::UniformRandomInterval<in_type> rnd{1 << 8};
   for (std::size_t i = 0; i < n; i++) {
-    const in_type m{*m_c.p};
-    const in_type x{*x_c.p};
-    const in_type c{*c_c.p};
+    const in_type m{rnd()};
+    const in_type x{rnd()};
+    const in_type c{rnd()};
 
     task->add_stimulus(Stimulus{m, x, c});
 
     sum += (m * x) + c;
     task->add_expected(Expect{sum});
-    x_c.next();
   }
   TaskRunner.set_task(std::move(task));
   TaskRunner.run_until_exhausted(true);

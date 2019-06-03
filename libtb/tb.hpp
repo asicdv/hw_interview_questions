@@ -1,5 +1,5 @@
 //========================================================================== //
-// Copyright (c) 2017, Stephen Henry
+// Copyright (c) 2019, Stephen Henry
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -25,10 +25,13 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-#ifndef __OPTIONS_HPP__
-#define __OPTIONS_HPP__
+#ifndef __TB_HPP__
+#define __TB_HPP__
 
-#cmakedefine OPT_ENABLE_TRACE
-#cmakedefine OPT_ENABLE_SCV
+namespace tb {
+
+void initialize(int argc, char **argv);
+
+} // namespace tb
 
 #endif

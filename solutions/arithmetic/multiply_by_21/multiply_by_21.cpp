@@ -107,17 +107,9 @@ TEST(MultiplyBy32Test, Basic) {
   const std::size_t n{1024 << 5};
   auto task = std::make_unique<tb::BasicNotFailTask<TOP> >(top);
 
-  struct stimulus_constraint : scv_constraint_base {
-    scv_smart_ptr<uint32_t> v;
-    SCV_CONSTRAINT_CTOR(stimulus_constraint) {
-      SCV_CONSTRAINT(v() < 1024);
-    }
-  } a_ptr("a_constrained");
-
-  for (std::size_t i = 0; i < n; i++) {
-    task->add_stimulus(Stimulus{*a_ptr.v});
-    a_ptr.next();
-  }
+  tb::Random::UniformRandomInterval<word_type> rnd{1024};
+  for (std::size_t i = 0; i < n; i++)
+    task->add_stimulus(Stimulus{rnd()});
   TaskRunner.set_task(std::move(task));
   TaskRunner.run_until_exhausted(true);
 }
