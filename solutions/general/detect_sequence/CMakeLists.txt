@@ -25,4 +25,11 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-emit_answer(tb_detect_sequence detect_sequence.sv detect_sequence.cpp)
+emit_solution(
+  TARGET
+  tb_detect_sequence
+  VTOP
+  detect_sequence.sv
+  TB
+  detect_sequence.cpp
+  )
