@@ -25,4 +25,11 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-emit_answer(tb_fibonacci fibonacci.sv fibonacci.cpp)
+emit_solution(
+  TARGET
+  tb_fibonacci
+  VTOP
+  fibonacci.sv
+  TB
+  fibonacci.cpp
+  )

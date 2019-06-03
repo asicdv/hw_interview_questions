@@ -25,84 +25,125 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-#include <libtb2.hpp>
+#include "libtb/libtb.hpp"
+#include "libtb/verilator.hpp"
+#include <gtest/gtest.h>
 #include "vobj/Vfibonacci.h"
 
-#define PORTS(__func)                           \
-    __func(y, uint32_t)
+using word_type = uint32_t;
 
-template<typename T>
+#define PORTS(__func)                           \
+    __func(y, word_type)
+
 struct Fibonacci {
-  Fibonacci() : a_(0), b_(1), ret_a_(true) {}
-  T operator()() {
-    T ret;
-    if (ret_a_) {
-      ret = a_;
-      a_ += b_;
+  Fibonacci() : x0_(1), x1_(2), sel_r_(false) {}
+  word_type operator()() {
+    word_type ret;
+    if (!sel_r_) {
+      ret = x0_;
+      x0_ += x1_;
     } else {
-      ret = b_;
-      b_ += a_;
+      ret = x1_;
+      x1_ += x0_;
     }
-    ret_a_ = !ret_a_;
+    sel_r_ = !sel_r_;
     return ret;
   }
  private:
-  bool ret_a_;
-  T a_, b_;
+  bool sel_r_;
+  word_type x0_, x1_;
 };
 
-struct FibonacciTb : libtb2::Top<FibonacciTb> {
-  typedef Vfibonacci uut_t;
-  SC_HAS_PROCESS(FibonacciTb);
-  FibonacciTb(sc_core::sc_module_name mn = "t")
-      : uut_("uut") {
-    //
-    resetter_.clk(clk_);
-    resetter_.rst(rst_);
-    //
-    sampler_.clk(clk_);
-    //
-    wd_.clk(clk_);
-    //
-    uut_.clk(clk_);
-    uut_.rst(rst_);
-#define __bind_ports(__name, __type)            \
-    uut_.__name(__name ## _);
-    PORTS(__bind_ports)
-#undef __bind_ports
-    SC_THREAD(t_checker);
+struct TOP : tb::Top {
+  TOP() {
+    v.rst(rst);
+    v.clk(clk);
+#define __bind_signals(__name, __type)          \
+    v.__name(__name);
+    PORTS(__bind_signals)
+#undef __bind_signals
+    start_tracing();
   }
- private:
-  void t_checker() {
-    resetter_.wait_reset_done();
-
-    while (true) {
-      wait(sampler_.sample());
-    
-      const uint32_t actual = y_;
-      const uint32_t expected = f_();
-
-      LOGGER(INFO) << " Actual = " << actual
-                   << " Expected = " << expected
-                   << "\n";
-      LIBTB2_ERROR_ON(actual != expected);
-    }
+  ~TOP() {
+    stop_tracing();
   }
-  Fibonacci<uint32_t> f_;
-  sc_core::sc_clock clk_;
-  sc_core::sc_signal<bool> rst_;
+  void t_apply_reset() {
+    rst = true;
+    t_await_cycles(2);
+    rst = false;
+    t_await_cycles(2);
+  }
+  void t_await_cycles(std::size_t n = 1) {
+    while (n--)
+      wait(clk.negedge_event());
+  }
+  Vfibonacci v{"fibonacci"};
+  ::sc_core::sc_signal<bool> rst{"rst"};
+  ::sc_core::sc_clock clk{"clk"};
 #define __declare_signal(__name, __type)        \
-  sc_core::sc_signal<__type> __name##_;
+  ::sc_core::sc_signal<__type> __name{#__name};
   PORTS(__declare_signal)
 #undef __declare_signal
-  libtb2::Resetter resetter_;
-  libtb2::Sampler sampler_;
-  libtb2::SimWatchDogCycles wd_;
-  uut_t uut_;
+ private:
+  void start_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    Verilated::traceEverOn(true);
+    vcd_ = std::make_unique<VerilatedVcdSc>();
+    v.trace(vcd_.get(), 99);
+    vcd_->open("sim.vcd");
+#endif
+  }
+  void stop_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    vcd_->close();
+#endif
+  }
+#ifdef OPT_ENABLE_TRACE
+  std::unique_ptr<VerilatedVcdSc> vcd_;
+#endif
 };
-SC_MODULE_EXPORT(FibonacciTb);
 
-int sc_main(int argc, char **argv) {
-  FibonacciTb tb;
-  return libtb2::Sim::start(argc, argv);
+namespace {
+
+TOP top;
+tb::TaskRunner TaskRunner;
+
+} // namespace
+
+TEST(FibonacciTest, Basic) {
+  struct FibonacciSequenceTask : tb::Task {
+    explicit FibonacciSequenceTask(std::size_t n = 16)
+        : n_(n) {}
+    bool is_completed() const override { return is_completed_ || fail(); }
+    void execute() override {
+      using namespace sc_core;
+
+      top.t_apply_reset();
+
+      for (std::size_t i = 0; i < n_; i++) {
+        const word_type actual{top.y};
+        const word_type expected{fib()};
+        ASSERT_EQ(actual, expected) << "["
+                                    << ::sc_core::sc_time_stamp()
+                                    << "]: Fail!";
+        top.t_await_cycles(1);
+      }
+      is_completed_ = true;
+    }
+   private:
+    bool fail() const { return ::testing::Test::HasFatalFailure(); }
+    bool is_completed_{false};
+    std::size_t n_;
+    Fibonacci fib;
+  };
+  std::unique_ptr<FibonacciSequenceTask> task =
+      std::make_unique<FibonacciSequenceTask>();
+  TaskRunner.set_task(std::move(task));
+  TaskRunner.run_until_exhausted(true);
+}
+
+int sc_main(int argc, char ** argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  ::tb::initialize(argc, argv);
+  return RUN_ALL_TESTS();
 }

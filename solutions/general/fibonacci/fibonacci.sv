@@ -84,7 +84,7 @@ module fibonacci (
   //
   always_ff @(posedge clk)
     if (rst) begin
-      x_0_r <= 'b1;
+      x_0_r <= 'b0;
       x_1_r <= 'b1;
     end else begin
       if (x_0_en)
