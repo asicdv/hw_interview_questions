@@ -34,7 +34,7 @@ TEST(Utility, PopulationCount) {
     EXPECT_EQ(tb::pop_count(1 << n), 1);
 
   const std::unordered_map<std::size_t, std::size_t> m{
-    { 0, 0},
+    { 0x00000000, 0 },
     { 0x00000001, 1 },
     { 0x00000003, 2 },
     { 0x00000007, 3 },
