@@ -107,7 +107,7 @@ struct BasicPassValidNotBusyTask : Task {
   void add_stimulus(const stimulus_type & stim) {
     stimulus_.push(stim);
   }
-  void add_expected(const expected_type & expect) {
+  virtual void add_expected(const expected_type & expect) {
     expected_.push(expect);
   }
   void execute() override {
@@ -132,8 +132,8 @@ struct BasicPassValidNotBusyTask : Task {
     if (!h_check.terminated())
       h_check.kill();
   }
- private:
-  void t_stimulus() {
+ protected:
+  virtual void t_stimulus() {
     top_.set_idle();
     top_.t_apply_reset();
     while (!stimulus_.empty() && !fail()) {
@@ -145,7 +145,7 @@ struct BasicPassValidNotBusyTask : Task {
     wait (100, ::sc_core::SC_NS);
     is_completed_ = true; 
   }
-  void m_checker() {
+  virtual void m_checker() {
     if (top_.out_is_valid()) {
       ASSERT_FALSE(expected_.empty());
 

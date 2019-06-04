@@ -1,5 +1,5 @@
 //========================================================================== //
-// Copyright (c) 2016, Stephen Henry
+// Copyright (c) 2019, Stephen Henry
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -25,260 +25,283 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-#include <libtb2.hpp>
-#include <deque>
-//
+#include "libtb/libtb.hpp"
+#include "libtb/verilator.hpp"
+#include <gtest/gtest.h>
+#include <tuple>
+#include <unordered_map>
 #include "vobj/Vmulti_counter_variants.h"
 
+using word_type = uint32_t;
+
 #define PORTS(__func)                           \
-    __func(cmd_pass, bool)                      \
-    __func(cmd_id, uint32_t)                    \
-    __func(cmd_op, uint32_t)                    \
-    __func(cmd_dat, uint32_t)                   \
-    __func(busy_r, bool)                        \
-    __func(s1_pass_r, bool)                     \
-    __func(s1_dat_r, uint32_t)                  \
-    __func(s2_pass_r, bool)                     \
-    __func(s2_dat_r, uint32_t)                  \
-    __func(s3_pass_r, bool)                     \
-    __func(s3_dat_r, uint32_t)
+  __func(cmd_pass, bool)                       \
+  __func(cmd_id, word_type)                    \
+  __func(cmd_op, word_type)                    \
+  __func(cmd_dat, word_type)                   \
+  __func(busy_r, bool)                          \
+  __func(s1_pass_r, bool)                       \
+  __func(s1_dat_r, word_type)                   \
+  __func(s2_pass_r, bool)                       \
+  __func(s2_dat_r, word_type)                   \
+  __func(s3_pass_r, bool)                       \
+  __func(s3_dat_r, word_type)
 
-typedef Vmulti_counter_variants uut_t;
+enum class OP : word_type {
+  NOP  = 0x00,
+  INIT = 0x04,
+  INCR = 0x0C,
+  DECR = 0x0D,
+  QRY  = 0x18,
+};
 
-enum OP { OP_NOP = 0x0,
-          OP_INIT = 0x04,
-          OP_INC = 0x0C,
-          OP_DEC = 0x0D,
-          OP_QRY = 0x18 };
-
-const char * to_string(OP op) {
+std::ostream & operator<<(std::ostream & os, const OP & op) {
   switch (op) {
-    case OP_INIT: return "OP_INIT";
-    case OP_INC: return "OP_INC";
-    case OP_DEC: return "OP_DEC";
-    case OP_QRY: return "OP_QRY";
-    case OP_NOP:
-    default: return "OP_NOP";
+    case OP::NOP: os << "NOP"; break;
+    case OP::INIT: os << "INIT"; break;
+    case OP::INCR: os << "INCR"; break;
+    case OP::DECR: os << "DECR"; break;
+    case OP::QRY: os << "QRY"; break;
   }
+  return os;
 }
+
+struct Stimulus {
+  friend std::ostream & operator<<(std::ostream & os, const Stimulus & stim) {
+    return os << "'{"
+              << "op=" <<stim.op()
+              << " , id=" << stim.id()
+              << " , dat=" << stim.dat()
+              << "}"
+        ;
+  }
+  Stimulus(OP op, word_type id, word_type dat = 0)
+      : op_(op), id_(id), dat_(dat) {}
+  OP op() const { return op_; }
+  word_type id() const { return id_; }
+  word_type dat() const { return dat_; }
+ private:
+  OP op_{OP::NOP};
+  word_type id_, dat_;
+};
+
+struct Expect {
+  friend std::ostream & operator<<(std::ostream & os, const Expect & res) {
+    return os << "'{dat=" << res.dat() << "}";
+  }
+  friend bool operator==(const Expect & a, const Expect & b) {
+    if (a.dat() != b.dat()) return false;
+    return true;
+  }
+  Expect() : is_valid_(false) {}
+  Expect(word_type dat) : dat_(dat), is_valid_(true) {}
+  bool is_valid() const { return is_valid_; }
+  word_type dat() const { return dat_; }
+ private:
+  bool is_valid_{true};
+  word_type dat_;
+};
+
+struct TOP : tb::Top {
+  using stimulus_type = Stimulus;
+  using expected_type = Expect;
+  
+  TOP() {
+    v.rst(rst);
+    v.clk(clk);
+#define __bind_signals(__name, __type)          \
+    v.__name(__name);
+    PORTS(__bind_signals)
+#undef __bind_signals
+    start_tracing();
+  }
+  ~TOP() {
+    stop_tracing();
+  }
+  void set_idle() {
+    cmd_pass = false;
+    cmd_id = word_type{};
+    cmd_op = word_type{};
+    cmd_dat = word_type{};
+  }
+  void t_set_stimulus(const Stimulus & stim) {
+    cmd_pass = true;
+    cmd_op = static_cast<word_type>(stim.op());
+    cmd_id = stim.id();
+    cmd_dat = stim.dat();
+    t_await_cycles();
+  }
+  bool out_is_valid(std::size_t i = 0) const {
+    switch (i) {
+      case 1: return s1_pass_r; break;
+      case 2: return s2_pass_r; break;
+      case 3: return s3_pass_r; break;
+    }
+    return false;
+  }
+  Expect get_expect(std::size_t i = 0) const {
+    switch (i) {
+      case 1: return Expect{s1_dat_r}; break;
+      case 2: return Expect{s2_dat_r}; break;
+      case 3: return Expect{s3_dat_r}; break;
+    }
+    return Expect{};
+  }
+  void t_apply_reset() {
+    rst = true;
+    t_await_cycles(2);
+    rst = false;
+    t_await_cycles(2);
+  }
+  void t_await_cycles(std::size_t n = 1) {
+    while (n--)
+      wait(clk.negedge_event());
+  }
+  Vmulti_counter_variants v{"multi_counter_variants"};
+  ::sc_core::sc_signal<bool> rst{"rst"};
+  ::sc_core::sc_clock clk{"clk"};
+#define __declare_signal(__name, __type)        \
+  ::sc_core::sc_signal<__type> __name{#__name};
+  PORTS(__declare_signal)
+#undef __declare_signal
+ private:
+  void start_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    Verilated::traceEverOn(true);
+    vcd_ = std::make_unique<VerilatedVcdSc>();
+    v.trace(vcd_.get(), 99);
+    vcd_->open("sim.vcd");
+#endif
+  }
+  void stop_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    vcd_->close();
+#endif
+  }
+#ifdef OPT_ENABLE_TRACE
+  std::unique_ptr<VerilatedVcdSc> vcd_;
+#endif
+};
 
 namespace {
 
-const int CNTRS_N = 32;
+// Behavioral model of the RTL.
+//
+struct MultiCounterModel {
+  using id_type = word_type;
+  using value_type = word_type;
 
-} // namespace 
-
-template<>
-struct scv_extensions<OP> : scv_enum_base<OP> {
-  SCV_ENUM_CTOR(OP) {
-    SCV_ENUM(OP_NOP);
-    SCV_ENUM(OP_INIT);
-    SCV_ENUM(OP_INC);
-    SCV_ENUM(OP_DEC);
-    SCV_ENUM(OP_QRY);
+  std::pair<bool, word_type> apply(const Stimulus & stim) {
+    switch (stim.op()) {
+      case OP::INIT:
+        mem_[stim.id()] = stim.dat();
+        break;
+      case OP::INCR:
+        ++mem_[stim.id()];
+        break;
+      case OP::DECR:
+        --mem_[stim.id()];
+        break;
+      case OP::QRY:
+        return std::make_pair(true, mem_[stim.id()]);
+        break;
+      case OP::NOP:
+      default:
+        return std::make_pair(false, 0);
+    }
+    return {false, 0};
   }
+ private:
+  std::unordered_map<id_type, value_type> mem_;
 };
 
-struct Cmd { OP op; uint32_t id; uint32_t dat; };
 
-template<>
-struct scv_extensions<Cmd> : scv_extensions_base<Cmd> {
-  scv_extensions<OP> op;
-  scv_extensions<uint32_t> id, dat;
-  SCV_EXTENSIONS_CTOR(Cmd) {
-    SCV_FIELD(op);
-    SCV_FIELD(id);
-    SCV_FIELD(dat);
+const std::size_t OP_CNTRS_N{32};
+const std::size_t OP_CNTRS_W{32};
+const std::size_t N{1024 << 4};
+
+TOP top;
+tb::TaskRunner TaskRunner;
+
+} // namespace
+
+struct MultiCounterVariantTask : ::tb::BasicPassValidNotBusyTask<TOP> {
+  MultiCounterVariantTask(TOP & top)
+      : BasicPassValidNotBusyTask<TOP>(top) {}
+  void add_expected(const expected_type & expect) override {
+    for (std::size_t i = 0; i < 3; i++)
+      expected_[i].push(expect);
   }
+ private:
+  void m_checker() override {
+    for (std::size_t i = 0; i < 3; i++) {
+      if (top_.out_is_valid(i + 1)) {
+        ASSERT_FALSE(expected_[i].empty());
+
+        const expected_type & tb_out{expected_[i].front()};
+        const expected_type & rtl_out{top_.get_expect(i + 1)};
+        ASSERT_EQ(tb_out, rtl_out) << "["
+                                   << ::sc_core::sc_time_stamp()
+                                   << "]: Stimulus mismatch!"
+                                   << " (id=" << (i + 1) << ")"
+                                   << " Expected: " << tb_out
+                                   << " Actual: " << rtl_out;
+        expected_[i].pop();
+      }
+    }
+  }
+  std::queue<expected_type> expected_[3];
 };
 
-struct CmdTransactorIntf : sc_core::sc_interface {
-  virtual void issue(const Cmd & c) = 0;
-};
+TEST(MultiCounterTest, MultipleID) {
+  const std::size_t ACTIVE_IDS{16};
+  auto task = std::make_unique<MultiCounterVariantTask>(top);
 
-struct CmdTransactor : sc_core::sc_module, CmdTransactorIntf {
-  //
-  sc_core::sc_in<bool> clk;
-  //
-  sc_core::sc_out<bool> cmd_pass;
-  sc_core::sc_out<uint32_t> cmd_id;
-  sc_core::sc_out<uint32_t> cmd_op;
-  sc_core::sc_out<uint32_t> cmd_dat;
-
-  CmdTransactor(sc_core::sc_module_name mn = "CmdXActor")
-      : sc_core::sc_module(mn) {}
+  MultiCounterModel model;
+  std::vector<word_type> active_ids;
   
-  void issue(const Cmd & c) {
-    cmd_pass = true;
-    cmd_id = c.id;
-    cmd_op = c.op;
-    cmd_dat = c.dat;
-    wait(clk.posedge_event());
-    cmd_pass = false;
-  }
-};
+  tb::Random::UniformRandomInterval<word_type> rnd_id{OP_CNTRS_N - 1};
+  tb::Random::UniformRandomInterval<word_type> rnd_word{1024 << 1};
+  for (std::size_t i = 0; i < ACTIVE_IDS; i++) {
+    const word_type id{rnd_id()};
+    const word_type init{rnd_word()};
 
-struct MultiCounterMdl {
-  void apply(const Cmd & c) {
-    switch (c.op) {
-    case OP_INIT: {
-      ctxts_[c.id] = c.dat;
-    } break;
-    case OP_INC: {
-      ctxts_[c.id]++;
-    } break;
-    case OP_DEC: {
-      ctxts_[c.id]--;
-    };
-    case OP_NOP:
-    case OP_QRY: {
-    } break;
-    }
+    active_ids.push_back(id);
+    const Stimulus stimulus{OP::INIT, id, init};
+    task->add_stimulus(stimulus);
+    auto r{model.apply(stimulus)};
+    ASSERT_TRUE(!r.first);
   }
-  uint32_t get(uint32_t id) {
-    return ctxts_[id];
-  }
-private:
-  std::map<uint32_t, uint32_t> ctxts_;
-};
+  tb::Random::Bag<OP> opbag;
+  opbag.add(OP::INCR);
+  opbag.add(OP::DECR);
+  tb::Random::Bag<word_type> idbag;
+  for (word_type id : active_ids)
+    idbag.add(id);
+  for (std::size_t i = 0; i < N; i++) {
+    const OP op{opbag()};
+    const word_type id{idbag()};
 
-struct MultiCounterVariantsTb : libtb2::Top<MultiCounterVariantsTb> {
-  sc_core::sc_port<CmdTransactorIntf> cmdintf;
-
-  SC_HAS_PROCESS(MultiCounterVariantsTb);
-  MultiCounterVariantsTb(sc_core::sc_module_name mn = "t")
-    : uut_("uut") {
-    //
-    wd_.clk(clk_);
-    //
-    sampler_.clk(clk_);
-    //
-    resetter_.clk(clk_);
-    resetter_.rst(rst_);
-    //
-    cmdintf.bind(cmdxactor_);
-    cmdxactor_.clk(clk_);
-    cmdxactor_.cmd_pass(cmd_pass_);
-    cmdxactor_.cmd_id(cmd_id_);
-    cmdxactor_.cmd_op(cmd_op_);
-    cmdxactor_.cmd_dat(cmd_dat_);
-    //
-    uut_.clk(clk_);
-    uut_.rst(rst_);
-#define __bind_signals(__name, __type)          \
-    uut_.__name(__name ## _);
-    PORTS(__bind_signals)
-#undef __bind_signals
-
-    SC_THREAD(t_stimulus);
-    SC_METHOD(m_checker);
-    sensitive << sampler_.sample();
-    dont_initialize();
-
-    st_.reset();
+    const Stimulus stimulus{op, id};
+    task->add_stimulus(stimulus);
+    auto r{model.apply(stimulus)};
+    ASSERT_TRUE(!r.first);
   }
-  void end_of_simulation() {
-    LOGGER(INFO) << "Transaction count = " << st_.n << "\n";
+  for (word_type id : active_ids) {
+    const Stimulus stimulus{OP::QRY, id};
+    task->add_stimulus(stimulus);
+    auto r{model.apply(stimulus)};
+    ASSERT_TRUE(r.first);
+    if (r.first)
+      task->add_expected(Expect{r.second});
   }
-private:
-  void m_checker() {
-    if (s1_pass_r_) {
-      LIBTB2_ERROR_ON(expected_[0].empty());
-      const uint32_t actual = s1_dat_r_;
-      const uint32_t expected = expected_[0].front().second;
-      expected_[0].pop_front();
-      
-      compare_output(1, actual, expected);
-    }
-    if (s2_pass_r_) {
-      LIBTB2_ERROR_ON(expected_[1].empty());
-      const uint32_t actual = s2_dat_r_;
-      const uint32_t expected = expected_[1].front().second;
-      expected_[1].pop_front();
-      
-      compare_output(2, actual, expected);
-    }
-    if (s3_pass_r_) {
-      LIBTB2_ERROR_ON(expected_[2].empty());
-      const uint32_t actual = s3_dat_r_;
-      const uint32_t expected = expected_[2].front().second;
-      expected_[2].pop_front();
-      
-      compare_output(3, actual, expected);
-    }
-  }
-  void compare_output(int i, uint32_t actual, uint32_t expected) {
-    LOGGER(INFO) << "i = " << i
-                 << " actual = " << actual
-                 << " expected = " << expected
-                 << "\n";
-    LIBTB2_ERROR_ON(actual != expected);
-  }
-  void t_stimulus() {
-    struct cmd_constraints : scv_constraint_base {
-      scv_smart_ptr<Cmd> c;
-      SCV_CONSTRAINT_CTOR(cmd_constraints) {
-        SCV_CONSTRAINT((c->id() >= 0) && (c->id() < CNTRS_N));
-      }
-    } cmd_c("cmd_constraint");
-
-    scv_smart_ptr<uint32_t> dat;
-    for (int i = 0; i < CNTRS_N; i++) {
-      dat->next();
-      
-      Cmd cmd;
-      cmd.op = OP_INIT;
-      cmd.id = i;
-      cmd.dat = *dat;
-      t_issue(cmd);
-    }
-    wd_.pat();
-    
-    while (true) {
-      cmd_c.next();
-      const Cmd cmd = *cmd_c.c;
-      
-      t_issue(cmd);
-      if (cmd.op == OP_QRY) {
-        for (int i = 0; i < 3; i++) {
-          expected_[i].push_back(std::make_pair(cmd.id, mdl_.get(cmd.id)));
-        }
-      }
-      st_.n++;
-      wait(clk_.posedge_event());
-    }
-  }
-  void t_issue(const Cmd & cmd) {
-    LOGGER(INFO) << "Issue cmd id = " << cmd.id
-                 << " op = " << to_string(cmd.op)
-                 << " dat = " << std::hex << cmd.dat << "\n";
-
-    cmdintf->issue(cmd);
-    mdl_.apply(cmd);
-  }
-  struct {
-    void reset() {
-      n = 0;
-    }
-    std::size_t n;
-  } st_;
-  MultiCounterMdl mdl_;
-  std::deque<std::pair<uint32_t, uint32_t> > expected_ [3];
-  sc_core::sc_clock clk_;
-  sc_core::sc_signal<bool> rst_;
-#define __declare_signals(__name, __type)       \
-  sc_core::sc_signal<__type> __name##_;
-  PORTS(__declare_signals)
-#undef __declare_signals
-  libtb2::Resetter resetter_;
-  libtb2::Sampler sampler_;
-  libtb2::SimWatchDogCycles wd_;
-  CmdTransactor cmdxactor_;
-  uut_t uut_;
-};
-SC_MODULE_EXPORT(MultiCounterVariantsTb);
+  
+  TaskRunner.set_task(std::move(task));
+  TaskRunner.run_until_exhausted();
+}
 
 int sc_main(int argc, char ** argv) {
-  MultiCounterVariantsTb tb;
-  return libtb2::Sim::start(argc, argv);
+  ::testing::InitGoogleTest(&argc, argv);
+  ::tb::initialize(argc, argv);
+  return RUN_ALL_TESTS();
 }

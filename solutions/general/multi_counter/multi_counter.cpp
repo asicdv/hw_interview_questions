@@ -1,5 +1,5 @@
 //========================================================================== //
-// Copyright (c) 2016, Stephen Henry
+// Copyright (c) 2019, Stephen Henry
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without

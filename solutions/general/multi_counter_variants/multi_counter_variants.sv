@@ -283,6 +283,9 @@ module multi_counter_variants #(
       logic fwd__s4_to_s2;
       logic fwd__s3_to_s2;
 
+      logic p1_is_op_init;
+      logic p2_is_op_init;
+
       w_t p2_dat;
 
       //
@@ -317,22 +320,28 @@ module multi_counter_variants #(
         fwd__s4_to_s2: p2_dat  = p4_ucode_r.dat;
         default:       p2_dat  = p2_ucode_r.dat;
       endcase // case (1'b1)
+
       unique case (p2_ucode_r.op)
-        OP_INIT: p3_ucode_w.dat = p2_dat;
+        OP_INIT: p3_ucode_w.dat = p2_ucode_r.dat;
         OP_INCR: p3_ucode_w.dat = p2_dat + 'b1;
         OP_DECR: p3_ucode_w.dat = p2_dat - 'b1;
         default: p3_ucode_w.dat = p2_dat;
       endcase // unique case (cmd_op)
 
       // LKUP (S1)
-      p2_ucode_w      = p1_ucode_r;
-      case (1'b1)
-        fwd__s2_to_s1: p2_ucode_w.dat  = p3_ucode_w.dat;
-        fwd__s3_to_s1: p2_ucode_w.dat  = p3_ucode_r.dat;
-        fwd__s4_to_s1: p2_ucode_w.dat  = p4_ucode_r.dat;
-        default:       p2_ucode_w.dat  =
-           (p1_ucode_r.op == OP_INIT) ? p1_ucode_r.dat : s3_sram_dout0;
-      endcase // case (1'b1)
+      p2_ucode_w     = p1_ucode_r;
+      p1_is_op_init  = (p1_ucode_r.op == OP_INIT);
+
+      casez ({p1_is_op_init,
+              fwd__s2_to_s1,
+              fwd__s3_to_s1,
+              fwd__s4_to_s1})
+        4'b1_???: p2_ucode_w.dat  = p1_ucode_r.dat;
+        4'b0_1??: p2_ucode_w.dat  = p3_ucode_w.dat;
+        4'b0_01?: p2_ucode_w.dat  = p3_ucode_r.dat;
+        4'b0_001: p2_ucode_w.dat  = p4_ucode_r.dat;
+        default:  p2_ucode_w.dat  = s3_sram_dout0;
+      endcase
 
       p4_ucode_w        = p3_ucode_r;
 
