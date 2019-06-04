@@ -25,9 +25,17 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-`include "libtb2.vh"
-
 module one_or_two #(parameter int W = 32) (
+
+  //======================================================================== //
+  //                                                                         //
+  // Misc.                                                                   //
+  //                                                                         //
+  //======================================================================== //
+
+  //
+    input                               clk
+  , input                               rst
 
  //========================================================================== //
  //                                                                           //
@@ -35,7 +43,8 @@ module one_or_two #(parameter int W = 32) (
  //                                                                           //
  //========================================================================== //
 
-   input [W-1:0] x
+ , input         pass
+ , input [W-1:0] x
 
  //========================================================================== //
  //                                                                           //
@@ -51,13 +60,11 @@ module one_or_two #(parameter int W = 32) (
  //                                                                           //
  //========================================================================== //
 
- , output logic has_set_0
-
- , output logic has_set_1
-
- , output logic has_set_more_than_1
+ , output logic has_vld_r
+ , output logic has_set_0_r
+ , output logic has_set_1_r
+ , output logic has_set_more_than_1_r
 );
-  `include "libtb2_bdy.vh"
 
   // ======================================================================== //
   //                                                                          //
@@ -67,7 +74,11 @@ module one_or_two #(parameter int W = 32) (
 
   logic [W-1:0]               x_cond;
   logic                       is_power_of_2;
-
+  logic                       has_set_0_w;
+  logic                       has_set_1_w;
+  logic                       has_set_more_than_1_w;
+  logic                       has_vld_w;
+  
   // ======================================================================== //
   //                                                                          //
   // Combinatorial Logic                                                      //
@@ -80,21 +91,47 @@ module one_or_two #(parameter int W = 32) (
     begin : one_or_two_PROC
 
       //
-      x_cond               = x ^ {W{inv}};
+      x_cond                 = x ^ {W{inv}};
 
       //
-      has_set_0            = (~|x_cond);
+      has_set_0_w            = (~|x_cond);
 
       // Critical path is through is_power_of_2
       //
-      is_power_of_2        = ~|(x_cond & (x_cond - 1));
+      is_power_of_2          = ~|(x_cond & (x_cond - 1));
 
       //
-      has_set_1            = (~has_set_0) & is_power_of_2;
+      has_set_1_w            = (~has_set_0_w) & is_power_of_2;
 
       //
-      has_set_more_than_1  = (W > 1) & (~has_set_0) & (~has_set_1);
+      has_set_more_than_1_w  = (W > 1) & (~has_set_0_w) & (~has_set_1_w);
+
+      //
+      has_vld_w              = pass;
 
     end // block: one_or_two_PROC
+  
+  // ======================================================================== //
+  //                                                                          //
+  // Flops                                                                    //
+  //                                                                          //
+  // ======================================================================== //
+
+  // ------------------------------------------------------------------------ //
+  //
+  always_ff @(posedge clk)
+    if (rst)
+      has_vld_r <= '0;
+    else
+      has_vld_r <= has_vld_w;
+  
+  // ------------------------------------------------------------------------ //
+  //
+  always_ff @(posedge clk)
+    if (has_vld_w) begin
+      has_set_0_r           <= has_set_0_w;
+      has_set_1_r           <= has_set_1_w;
+      has_set_more_than_1_r <= has_set_more_than_1_w;
+    end
 
 endmodule // one_or_two

@@ -25,151 +25,178 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-#include <libtb2.hpp>
-#include <sstream>
-#include <map>
+//#include <libtb2.hpp>
+//#include <sstream>
+//#include <map>
+
+#include "libtb/libtb.hpp"
+#include "libtb/verilator.hpp"
+#include <gtest/gtest.h>
 #include "vobj/Vone_or_two.h"
 
+using word_type = uint32_t;
+
 #define PORTS(__func)                           \
-  __func(x, uint32_t)                           \
+  __func(pass, bool)                            \
+  __func(x, word_type)                          \
   __func(inv, bool)                             \
-  __func(has_set_0, bool)                       \
-  __func(has_set_1, bool)                       \
-  __func(has_set_more_than_1, bool)
+  __func(has_vld_r, bool)                       \
+  __func(has_set_0_r, bool)                     \
+  __func(has_set_1_r, bool)                     \
+  __func(has_set_more_than_1_r, bool)
 
-enum InState { ZERO, ONE, MULTI };
 
-template<>
-struct scv_extensions<InState> : public scv_enum_base<InState> {
-  SCV_ENUM_CTOR(InState) {
-    SCV_ENUM(ZERO);
-    SCV_ENUM(ONE);
-    SCV_ENUM(MULTI);
+struct Stimulus {
+  friend std::ostream & operator<<(std::ostream & os, const Stimulus & stim) {
+    return os << "'{x=" << stim.x() << "}";
   }
+  Stimulus(word_type x) : x_(x) {}
+  word_type x() const { return x_; }
+ private:
+  word_type x_;
 };
 
-template<typename T>
-struct Stimulus : libtb2::RandomSrc<T> {
-  SC_HAS_PROCESS(Stimulus);
-  Stimulus(sc_core::sc_module_name mn = "Stimulus")
-      : libtb2::RandomSrc<T>(mn) {
-
-    scv_bag<InState> in_dist_;
-    in_dist_.add(ZERO, 10);
-    in_dist_.add(ONE, 50);
-    in_dist_.add(MULTI, 70);
-    in_state_->set_mode(in_dist_);
-
-    rnd_bit_->keep_only(0, sizeof(T) * 4 - 1);
+struct Expect {
+  friend std::ostream & operator<<(std::ostream & os, const Expect & res) {
+    return os << "'{"
+              << "has_set_0=" << res.has_set_0()
+              << "has_set_1=" << res.has_set_1()
+              << "has_set_more_than_1=" << res.has_set_more_than_1()
+              << "}";
   }
- protected:
-  void m_random() {
-    in_state_->next();
-    switch  (*in_state_) {
-      case ZERO: {
-        this->out = 0;
-      } break;
-      case ONE: {
-        rnd_bit_->next();
-        this->out = (1 << *rnd_bit_);
-      } break;
-      case MULTI: {
-        this->rnd_->next();
-        this->out = *this->rnd_;
-      };
-    }
+  friend bool operator==(const Expect & a, const Expect & b) {
+    bool ne{false};
+    ne |= (a.has_set_0() != b.has_set_0());
+    ne |= (a.has_set_1() != b.has_set_1());
+    ne |= (a.has_set_more_than_1() != b.has_set_more_than_1());
+    return !ne;
   }
-  scv_smart_ptr<InState> in_state_;
-  scv_smart_ptr<std::size_t> rnd_bit_;
+  Expect(bool has_set_0, bool has_set_1, bool has_set_more_than_1)
+      : has_set_0_(has_set_0), has_set_1_(has_set_1),
+        has_set_more_than_1_(has_set_more_than_1) {}
+  bool has_set_0() const { return has_set_0_; }
+  bool has_set_1() const { return has_set_1_; }
+  bool has_set_more_than_1() const { return has_set_more_than_1_; }
+ private:
+  bool has_set_0_, has_set_1_, has_set_more_than_1_;
 };
 
-class OneOrTwoTb : libtb2::Top<OneOrTwoTb> {
-  typedef Vone_or_two uut;
- public:
-  SC_HAS_PROCESS(OneOrTwoTb);
-  OneOrTwoTb(sc_core::sc_module_name = "t")
-      : uut_("uut"), clk_("clk"), wd_(1000, "wd") {
+struct TOP : tb::Top {
+  using stimulus_type = Stimulus;
+  using expected_type = Expect;
 
-    //
-    rnd_x_.clk(clk_);
-    rnd_x_.out(x_);
-    //
-    rnd_inv_.clk(clk_);
-    rnd_inv_.out(inv_);
-    //
-    wd_.clk(clk_);
-    
-#define __bind(__name, __type)                  \
-    uut_.__name(__name##_);
-    PORTS(__bind)
-#undef __bind
-
-    SC_METHOD(m_checker);
-    sensitive << clk_.negedge_event();
-    dont_initialize();
+  TOP() {
+    v.rst(rst);
+    v.clk(clk);
+#define __bind_signals(__name, __type)          \
+    v.__name(__name);
+    PORTS(__bind_signals)
+#undef __bind_signals
+    start_tracing();
   }
+  ~TOP() {
+    stop_tracing();
+  }
+  void set_idle() {
+    pass = false;
+    x = word_type{};
+  }
+  void t_set_stimulus(const stimulus_type & stim) {
+    t_wait_not_busy();
+    pass = true;
+    x = stim.x();
+    t_await_cycles(1);
+    set_idle();
+  }
+  bool out_is_valid() const { return has_vld_r; }
+  Expect get_expect() const {
+    return Expect{has_set_0_r, has_set_1_r, has_set_more_than_1_r};
+  }
+  void t_apply_reset() {
+    rst = true;
+    t_await_cycles(2);
+    rst = false;
+    t_await_cycles(2);
+  }
+  void t_wait_not_busy() {}
+  void t_await_cycles(std::size_t n = 1) {
+    while (n--)
+      wait(clk.negedge_event());
+  }
+  Vone_or_two v{"one_or_two"};
+  ::sc_core::sc_signal<bool> rst{"rst"};
+  ::sc_core::sc_clock clk{"clk"};
+#define __declare_signal(__name, __type)        \
+  ::sc_core::sc_signal<__type> __name{#__name};
+  PORTS(__declare_signal)
+#undef __declare_signal
  private:
+  void start_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    Verilated::traceEverOn(true);
+    vcd_ = std::make_unique<VerilatedVcdSc>();
+    v.trace(vcd_.get(), 99);
+    vcd_->open("sim.vcd");
+#endif
+  }
+  void stop_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    vcd_->close();
+#endif
+  }
+#ifdef OPT_ENABLE_TRACE
+  std::unique_ptr<VerilatedVcdSc> vcd_;
+#endif
+};
 
-  void m_checker() {
-    switch (libtb2::popcount(inv_ ? ~x_ : x_)) {
-      case 0: {
-        LIBTB2_ERROR_ON(!has_set_0_);
-        LIBTB2_ERROR_ON( has_set_1_);
-        LIBTB2_ERROR_ON( has_set_more_than_1_);
-        
-        dist_[ZERO]++;
-      } break;
-      case 1: {
-        LIBTB2_ERROR_ON( has_set_0_);
-        LIBTB2_ERROR_ON(!has_set_1_);
-        LIBTB2_ERROR_ON( has_set_more_than_1_);
-        
-        dist_[ONE]++;
-      } break;
-      default: {
-        LIBTB2_ERROR_ON( has_set_0_);
-        LIBTB2_ERROR_ON( has_set_1_);
-        LIBTB2_ERROR_ON(!has_set_more_than_1_);
-        
-        dist_[MULTI]++;
-      } break;
-    }
-    trace();
-  }
+namespace {
 
-  void end_of_simulation() {
-    typedef std::map<int, std::size_t>::const_iterator it_t;
-    for (it_t it = dist_.begin(); it != dist_.end(); ++it) {
-      std::cout << it->first << " " << it->second << "\n";
-    }
-  }
- private:
-  void trace() {
-    libtb2::Render r;
-    r.add("x", x_);
-    r.add("inv", inv_);
-    r.add("has_set_0", has_set_0_);
-    r.add("has_set_1", has_set_1_);
-    r.add("has_set_more_than_1", has_set_more_than_1_);
-    r.render(std::cout);
-  }
-  Stimulus<uint32_t> rnd_x_;
-  libtb2::RandomSrc<bool>  rnd_inv_;
-  libtb2::SimWatchDogCycles wd_;
-  sc_core::sc_clock clk_;
-  scv_smart_ptr<InState> in_state_;
+TOP top;
+tb::TaskRunner TaskRunner;
+
+} // namespace
+enum class Mode { Zero, One, MoreThanOne };
+
+TEST(OneOrTwoTest, Basic) {
   
-#define __signals(__name, __type)               \
-  sc_core::sc_signal<__type> __name##_;
-  PORTS(__signals)
-#undef __signals
-  uut uut_;
-  std::map<int, std::size_t> dist_;
-};
- SC_MODULE_EXPORT(OneOrTwoTb);
+  const std::size_t n{1024 << 3};
+  auto task = std::make_unique<
+    tb::BasicPassValidNotBusyTask<TOP> >(top);
 
-int sc_main(int argc, char **argv)
-{
-  OneOrTwoTb t;
-  return libtb2::Sim::start(argc, argv);
+  tb::Random::Bag<Mode> mbag{};
+  mbag.add(Mode::Zero);
+  mbag.add(Mode::One);
+  mbag.add(Mode::MoreThanOne);
+  tb::Random::UniformRandomInterval<word_type> rnd{};
+  for (std::size_t i = 0; i < n; i++) {
+    word_type w;
+    bool has_set_0{false};
+    bool has_set_1{false};
+    bool has_set_more_than_1{false};
+    switch (mbag()) {
+      case Mode::Zero:
+        has_set_0 = true;
+        w = 0;
+        break;
+      case Mode::One:
+        has_set_1 = true;
+        w = (1 << (rnd() & 0x1F));
+        break;
+      case Mode::MoreThanOne:
+        has_set_more_than_1 = true;
+        w = rnd();
+        break;
+    }
+    task->add_stimulus(Stimulus{w});
+    const Expect expect{has_set_0, has_set_1, has_set_more_than_1};
+    task->add_expected(expect);
+  }
+  TaskRunner.set_task(std::move(task));
+  TaskRunner.run_until_exhausted(true);
+}
+
+int sc_main(int argc, char ** argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  ::tb::initialize(argc, argv);
+  return RUN_ALL_TESTS();
 }
