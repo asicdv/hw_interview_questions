@@ -154,24 +154,39 @@ struct TestCase {
     os << "]";
     return os << "}";
   }
-  
+
   static TestCase generate(word_type w, word_type n) {
     tb::Random::UniformRandomInterval<word_type> rnd((1 << w) - 1);
-    tb::Random::NotPriorPredicate<word_type> pred;
+    tb::Random::IsUniquePredicate<word_type> pred;
     tb::Random::Filter<tb::Random::UniformRandomInterval<word_type>,
-                       tb::Random::NotPriorPredicate<word_type> > filter{rnd, pred};
+                       tb::Random::IsUniquePredicate<word_type> > filter{rnd, pred};
     
     TestCase t;
-    for (std::size_t n = 0; n < 8; n++) {
+
+    // Generate a random integer and insert two copies of the value
+    // into word vector.
+    //
+    for (std::size_t n = 0; n < (w >> 1); n++) {
       const word_type duplicated{filter()};
 
       t.words_.push_back(duplicated);
       t.words_.push_back(duplicated);
     }
+
+    // Generate a final random integer and insert only one copy of the
+    // value into the word vector.
+    //
     const word_type not_duplicated{filter()};
     t.words_.push_back(not_duplicated);
     t.expect_ = Expect{not_duplicated};
+
+    // Finally, shuffle the sequence randomly such that duplicated
+    // values are not sequentially adjacent in memory (although there
+    // is no restriction on this being the case in the RTL).
+    //
     tb::Random::shuffle(t.words_.begin(), t.words_.end());
+
+    // Finished TestCase construction, return
     return t;
   }
 
@@ -189,16 +204,27 @@ TEST(MissingDuplicateWordTest, Basic) {
     bool is_completed() const override { return is_completed_; }
     void execute() override {
       top.t_apply_reset();
+
+      // For each pending test case,
+      //
       for (const TestCase & c : tests_) {
+
+        // Load state of searcher hardware.
+        //
         for (std::size_t id = 0; id < c.words().size(); id++)
           top.t_state_set(id, c.words()[id]);
         top.t_state_idle();
 
+        // Initiate search operation.
+        //
         top.t_cntrl_start();
         top.t_cntrl_await_not_busy();
 
         const Expect actual{top.get_expect()};
         const Expect expect{c.expect()};
+
+        // Compare actual versus expected.
+        //
         ASSERT_EQ(actual, expect);
       }
       is_completed_ = true;

@@ -32,10 +32,14 @@
 #include <limits>
 #include <random>
 #include <algorithm>
+#include <unordered_set>
 
 namespace tb {
 
 struct Random {
+
+  // Uniform integral random number generator.
+  //
   template <typename T>
   struct UniformRandomInterval {
     using value_type = T;
@@ -57,6 +61,9 @@ struct Random {
     T lo_, hi_;
   };
 
+  // Filter functor that sources a sequence of values from the RND
+  // class according to the filter 'FN' class.
+  //
   template<typename RND, typename FN>
   struct Filter {
     using value_type = typename RND::value_type;
@@ -72,20 +79,24 @@ struct Random {
     RND & rnd_;
   };
 
+  // Stateful filter predicate whereby values which have been seen
+  // prior are rejected.
+  //
   template<typename T>
-  struct NotPriorPredicate {
+  struct IsUniquePredicate {
     void reset() { prior_.clear(); }
     bool operator()(const T & t) {
-      if (std::find(prior_.begin(), prior_.end(), t) == prior_.end()) {
-        prior_.push_back(t);
-        return true;
-      }
-      return false;
+      const bool ret{prior_.count(t) == 0};
+      if (ret)
+        prior_.insert(t);
+      return ret;
     }
    private:
-    std::vector<T> prior_;
+    std::unordered_set<T> prior_;
   };
 
+  // Bag class; used to randomly pick from a set of values.
+  //
   template<typename T>
   struct Bag {
     explicit Bag() {};
@@ -107,6 +118,9 @@ struct Random {
     std::vector<T> v_;
   };
 
+  // Function to shuffle some sequence of values pointed by two Random
+  // Access Iterators.
+  //
   template<typename RndIt>
   static void shuffle(RndIt begin, RndIt end) {
     std::shuffle(begin, end, std::mt19937{Random::rd_()});
