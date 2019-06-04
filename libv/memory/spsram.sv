@@ -25,11 +25,11 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-`include "libv2_pkg.vh"
+`include "libv_pkg.vh"
 
 module spsram #(parameter int W = 32,
                 parameter int N = 128,
-                 parameter bit ASYNC_DOUT = 'b0)
+                parameter bit ASYNC_DOUT = 'b0)
 (
     input                               clk
   , input                               en

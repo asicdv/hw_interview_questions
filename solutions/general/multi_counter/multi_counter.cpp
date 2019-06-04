@@ -25,240 +25,246 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-#include <libtb2.hpp>
-#include <map>
-#include <deque>
-#include <utility>
+#include "libtb/libtb.hpp"
+#include "libtb/verilator.hpp"
+#include <gtest/gtest.h>
+#include <tuple>
+#include <unordered_map>
 #include "vobj/Vmulti_counter.h"
-typedef Vmulti_counter uut_t;
+
+using word_type = uint32_t;
 
 #define PORTS(__func)                           \
   __func(cntr_pass, bool)                       \
-  __func(cntr_id, uint32_t)                     \
-  __func(cntr_op, uint32_t)                     \
-  __func(cntr_dat, uint32_t)                    \
+  __func(cntr_id, word_type)                    \
+  __func(cntr_op, word_type)                    \
+  __func(cntr_dat, word_type)                   \
   __func(status_pass_r, bool)                   \
   __func(status_qry_r, bool)                    \
-  __func(status_id_r, uint32_t)                 \
-  __func(status_dat_r, uint32_t)
+  __func(status_id_r, word_type)                \
+  __func(status_dat_r, word_type)
 
-enum OP { OP_NOP = 0x0,
-          OP_INIT = 0x04,
-          OP_INC = 0x0C,
-          OP_DEC = 0x0D,
-          OP_QRY = 0x18 };
-const char * to_string(OP op) {
+enum class OP : word_type {
+  NOP  = 0x00,
+  INIT = 0x04,
+  INCR = 0x0C,
+  DECR = 0x0D,
+  QRY  = 0x18,
+};
+
+std::ostream & operator<<(std::ostream & os, const OP & op) {
   switch (op) {
-    case OP_INIT: return "OP_INIT";
-    case OP_INC: return "OP_INC";
-    case OP_DEC: return "OP_DEC";
-    case OP_QRY: return "OP_QRY";
-    case OP_NOP:
-    default: return "OP_NOP";
+    case OP::NOP: os << "NOP"; break;
+    case OP::INIT: os << "INIT"; break;
+    case OP::INCR: os << "INCR"; break;
+    case OP::DECR: os << "DECR"; break;
+    case OP::QRY: os << "QRY"; break;
   }
+  return os;
 }
+
+struct Stimulus {
+  friend std::ostream & operator<<(std::ostream & os, const Stimulus & stim) {
+    return os << "'{"
+              << "op=" <<stim.op()
+              << " , id=" << stim.id()
+              << " , dat=" << stim.dat()
+              << "}"
+        ;
+  }
+  Stimulus(OP op, word_type id, word_type dat = 0)
+      : op_(op), id_(id), dat_(dat) {}
+  OP op() const { return op_; }
+  word_type id() const { return id_; }
+  word_type dat() const { return dat_; }
+ private:
+  OP op_{OP::NOP};
+  word_type id_, dat_;
+};
+
+struct Expect {
+  friend std::ostream & operator<<(std::ostream & os, const Expect & res) {
+    return os << "'{"
+              << "id=" << res.id()
+              << " , dat=" << res.dat()
+              << "}"
+        ;
+  }
+  friend bool operator==(const Expect & a, const Expect & b) {
+    if (a.id() != b.id()) return false;
+    if (a.dat() != b.dat()) return false;
+    return true;
+  }
+  Expect(word_type id, word_type dat) : id_(id), dat_(dat) {}
+  word_type id() const { return id_; }
+  word_type dat() const { return dat_; }
+ private:
+  word_type dat_, id_;
+};
+
+struct TOP : tb::Top {
+  using stimulus_type = Stimulus;
+  using expected_type = Expect;
+  
+  TOP() {
+    v.rst(rst);
+    v.clk(clk);
+#define __bind_signals(__name, __type)          \
+    v.__name(__name);
+    PORTS(__bind_signals)
+#undef __bind_signals
+    start_tracing();
+  }
+  ~TOP() {
+    stop_tracing();
+  }
+  void set_idle() {
+    cntr_pass = false;
+    cntr_id = word_type{};
+    cntr_op = word_type{};
+    cntr_dat = word_type{};
+  }
+  void t_set_stimulus(const Stimulus & stim) {
+    cntr_pass = true;
+    cntr_op = static_cast<word_type>(stim.op());
+    cntr_id = stim.id();
+    cntr_dat = stim.dat();
+    t_await_cycles();
+  }
+  bool out_is_valid() const {
+    return status_pass_r && status_qry_r;
+  }
+  Expect get_expect() const {
+    return Expect{status_id_r, status_dat_r};
+  }
+  void t_apply_reset() {
+    rst = true;
+    t_await_cycles(2);
+    rst = false;
+    t_await_cycles(2);
+  }
+  void t_await_cycles(std::size_t n = 1) {
+    while (n--)
+      wait(clk.negedge_event());
+  }
+  Vmulti_counter v{"multi_counter"};
+  ::sc_core::sc_signal<bool> rst{"rst"};
+  ::sc_core::sc_clock clk{"clk"};
+#define __declare_signal(__name, __type)        \
+  ::sc_core::sc_signal<__type> __name{#__name};
+  PORTS(__declare_signal)
+#undef __declare_signal
+ private:
+  void start_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    Verilated::traceEverOn(true);
+    vcd_ = std::make_unique<VerilatedVcdSc>();
+    v.trace(vcd_.get(), 99);
+    vcd_->open("sim.vcd");
+#endif
+  }
+  void stop_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    vcd_->close();
+#endif
+  }
+#ifdef OPT_ENABLE_TRACE
+  std::unique_ptr<VerilatedVcdSc> vcd_;
+#endif
+};
 
 namespace {
 
-const std::size_t CNTRS_N = 256;
+// Behavioral model of the RTL.
+//
+struct MultiCounterModel {
+  using id_type = word_type;
+  using value_type = word_type;
 
-} // namespace 
-
-template<>
-struct scv_extensions<OP> : scv_enum_base<OP> {
-  SCV_ENUM_CTOR(OP) {
-    SCV_ENUM(OP_NOP);
-    SCV_ENUM(OP_INIT);
-    SCV_ENUM(OP_INC);
-    SCV_ENUM(OP_DEC);
-    SCV_ENUM(OP_QRY);
-  }
-};
-
-struct Cmd {
-  OP op;
-  uint32_t id;
-  uint32_t dat;
-};
-
-template<>
-struct scv_extensions<Cmd> : scv_extensions_base<Cmd> {
-  scv_extensions<OP> op;
-  scv_extensions<uint32_t> id, dat;
-  SCV_EXTENSIONS_CTOR(Cmd) {
-    SCV_FIELD(op);
-    SCV_FIELD(id);
-    SCV_FIELD(dat);
-  }
-};
-
-struct CmdTransactorIntf : sc_core::sc_interface {
-  virtual void issue(const Cmd & c) = 0;
-};
-
-struct CmdTransactor : sc_core::sc_module, CmdTransactorIntf {
-  //
-  sc_core::sc_in<bool> clk;
-  //
-  sc_core::sc_out<bool> cntr_pass;
-  sc_core::sc_out<uint32_t> cntr_id;
-  sc_core::sc_out<uint32_t> cntr_op;
-  sc_core::sc_out<uint32_t> cntr_dat;
-
-  CmdTransactor(sc_core::sc_module_name mn = "CmdXActor")
-      : sc_core::sc_module(mn) {}
-  
-  void issue(const Cmd & c) {
-    cntr_pass = true;
-    cntr_id = c.id;
-    cntr_op = c.op;
-    cntr_dat = c.dat;
-    wait(clk.posedge_event());
-    cntr_pass = false;
-  }
-};
-
-struct MultiCounterMdl {
-  void apply(const Cmd & c) {
-    switch (c.op) {
-      case OP_INIT: {
-        ctxts_[c.id] = c.dat;
-      } break;
-      case OP_INC: {
-        ctxts_[c.id]++;
-      } break;
-      case OP_DEC: {
-        ctxts_[c.id]--;
-      };
-      case OP_NOP:
-      case OP_QRY: {
-      } break;
+  std::pair<bool, word_type> apply(const Stimulus & stim) {
+    switch (stim.op()) {
+      case OP::INIT:
+        mem_[stim.id()] = stim.dat();
+        break;
+      case OP::INCR:
+        ++mem_[stim.id()];
+        break;
+      case OP::DECR:
+        --mem_[stim.id()];
+        break;
+      case OP::QRY:
+        return std::make_pair(true, mem_[stim.id()]);
+        break;
+      case OP::NOP:
+      default:
+        return std::make_pair(false, 0);
     }
-  }
-  uint32_t get(uint32_t id) {
-    return ctxts_[id];
+    return {false, 0};
   }
  private:
-  std::map<uint32_t, uint32_t> ctxts_;
+  std::unordered_map<id_type, value_type> mem_;
 };
 
-struct MultiCounterTb : libtb2::Top<MultiCounterTb> {
-  sc_core::sc_port<CmdTransactorIntf> cmdintf;
 
-  SC_HAS_PROCESS(MultiCounterTb);
-  MultiCounterTb(sc_core::sc_module_name mn = "t")
-      : uut_("uut"), cmdxactor_("CmdXActor") {
-    //
-    wd_.clk(clk_);
-    //
-    sampler_.clk(clk_);
-    //
-    resetter_.clk(clk_);
-    resetter_.rst(rst_);
-    //
-    cmdintf.bind(cmdxactor_);
-    cmdxactor_.clk(clk_);
-    cmdxactor_.cntr_pass(cntr_pass_);
-    cmdxactor_.cntr_id(cntr_id_);
-    cmdxactor_.cntr_op(cntr_op_);
-    cmdxactor_.cntr_dat(cntr_dat_);
-    //
-    uut_.clk(clk_);
-    uut_.rst(rst_);
-#define __bind_signals(__name, __type)          \
-    uut_.__name(__name ## _);
-    PORTS(__bind_signals)
-#undef __bind_signals
+const std::size_t OP_CNTRS_N{256};
+const std::size_t OP_CNTRS_W{32};
 
-    SC_THREAD(t_stimulus);
-    SC_METHOD(m_checker);
-    sensitive << sampler_.sample();
-    dont_initialize();
+TOP top;
+tb::TaskRunner TaskRunner;
 
-    st_.reset();
+} // namespace
+
+TEST(MultiCounterTest, Basic) {
+  const std::size_t N{1024 << 4};
+  const std::size_t ACTIVE_IDS{16};
+  auto task = std::make_unique<
+    tb::BasicPassValidNotBusyTask<TOP> >(top);
+
+  MultiCounterModel model;
+  std::vector<word_type> active_ids;
+  
+  tb::Random::UniformRandomInterval<word_type> rnd_id{OP_CNTRS_N - 1};
+  tb::Random::UniformRandomInterval<word_type> rnd_word{};
+  for (std::size_t i = 0; i < ACTIVE_IDS; i++) {
+    const word_type id{rnd_id()};
+    const word_type init{rnd_word()};
+
+    active_ids.push_back(id);
+    const Stimulus stimulus{OP::INIT, id, init};
+    task->add_stimulus(stimulus);
+    auto r{model.apply(stimulus)};
+    ASSERT_TRUE(!r.first);
   }
-private:
-  void m_checker() {
-    if (status_qry_r_) {
-      const std::pair<uint32_t, uint32_t> e = expected_.front();
-      expected_.pop_front();
-      
-      const uint32_t actual_id = status_id_r_;
-      const uint32_t expected_id = e.first;
-      LIBTB2_ERROR_ON(actual_id != expected_id);
+  tb::Random::Bag<OP> opbag;
+  opbag.add(OP::INCR);
+  opbag.add(OP::DECR);
+  tb::Random::Bag<word_type> idbag;
+  for (word_type id : active_ids)
+    idbag.add(id);
+  for (std::size_t i = 0; i < N; i++) {
+    const OP op{opbag()};
+    const word_type id{idbag()};
 
-      const uint32_t actual = status_dat_r_;
-      const uint32_t expected = e.second;
-
-      LOGGER(INFO) << " Expected = " << expected
-                   << " Actual = " << actual
-                   << "\n";
-      LIBTB2_ERROR_ON(actual != expected);
-    }
+    const Stimulus stimulus{op, id};
+    task->add_stimulus(stimulus);
+    auto r{model.apply(stimulus)};
+    ASSERT_TRUE(!r.first);
   }
-  void t_stimulus() {
-    struct cmd_constraints : scv_constraint_base {
-      scv_smart_ptr<Cmd> c;
-      SCV_CONSTRAINT_CTOR(cmd_constraints) {
-        SCV_CONSTRAINT((c->id() >= 0) && (c->id() < 256));
-      }
-    } cmd_c("cmd_constraint");
-
-    scv_smart_ptr<uint32_t> dat;
-    for (int i = 0; i < CNTRS_N; i++) {
-      dat->next();
-      
-      Cmd cmd;
-      cmd.op = OP_INIT;
-      cmd.id = i;
-      cmd.dat = *dat;
-      t_issue(cmd);
-    }
-    wd_.pat();
-    
-    while (true) {
-      cmd_c.next();
-      const Cmd cmd = *cmd_c.c;
-      
-      t_issue(cmd);
-      if (cmd.op == OP_QRY) {
-        expected_.push_back(std::make_pair(cmd.id, mdl_.get(cmd.id)));
-      }
-      st_.n++;
-      wait(clk_.posedge_event());
-    }
+  for (word_type id : active_ids) {
+    const Stimulus stimulus{OP::QRY, id};
+    task->add_stimulus(stimulus);
+    auto r{model.apply(stimulus)};
+    ASSERT_TRUE(r.first);
+    if (r.first)
+      task->add_expected(Expect{id, r.second});
   }
-  void t_issue(const Cmd & cmd) {
-    LOGGER(INFO) << "Issue cmd id = " << cmd.id
-                 << " op = " << to_string(cmd.op)
-                 << " dat = " << std::hex << cmd.dat << "\n";
-
-    cmdintf->issue(cmd);
-    mdl_.apply(cmd);
-  }
-  struct {
-    void reset() {
-      n = 0;
-    }
-    std::size_t n;
-  } st_;
-  MultiCounterMdl mdl_;
-  std::deque<std::pair<uint32_t, uint32_t> > expected_;
-  sc_core::sc_clock clk_;
-  sc_core::sc_signal<bool> rst_;
-#define __declare_signals(__name, __type)       \
-  sc_core::sc_signal<__type> __name##_;
-  PORTS(__declare_signals)
-#undef __declare_signals
-  libtb2::Resetter resetter_;
-  libtb2::Sampler sampler_;
-  libtb2::SimWatchDogCycles wd_;
-  CmdTransactor cmdxactor_;
-  uut_t uut_;
-};
-SC_MODULE_EXPORT(MultiCounterTb);
+  
+  TaskRunner.set_task(std::move(task));
+  TaskRunner.run_until_exhausted(true);
+}
 
 int sc_main(int argc, char ** argv) {
-  MultiCounterTb tb;
-  return libtb2::Sim::start(argc, argv);
+  ::testing::InitGoogleTest(&argc, argv);
+  ::tb::initialize(argc, argv);
+  return RUN_ALL_TESTS();
 }

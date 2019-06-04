@@ -25,8 +25,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-`include "libtb2.vh"
-`include "libv2_pkg.vh"
+`include "libv_pkg.vh"
 
 module dpsram #(parameter int W = 32, parameter int N = 128)
 (
@@ -56,8 +55,6 @@ module dpsram #(parameter int W = 32, parameter int N = 128)
     end
     return P_IGNORE_COLLISIONS ? 1'b0 : ret;
   end endfunction // address_collision
-  
-  `libtb2_assert_clk(!address_collision(), posedge clk0 or posedge clk1);
 
   typedef logic [W-1:0]       w_t;
   w_t                         mem_r [N-1:0];

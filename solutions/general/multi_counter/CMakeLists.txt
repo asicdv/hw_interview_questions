@@ -25,4 +25,11 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-emit_answer(tb_multi_counter multi_counter.sv multi_counter.cpp)
+emit_solution(
+  TARGET
+  tb_multi_counter
+  VTOP
+  multi_counter.sv
+  TB
+  multi_counter.cpp
+  )
