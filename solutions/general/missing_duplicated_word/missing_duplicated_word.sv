@@ -25,8 +25,6 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-`include "libtb2.vh"
-
 module missing_duplicated_word #(parameter int W = 5, parameter int N = 17) (
 
    //======================================================================== //

@@ -25,10 +25,6 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-//#include <libtb2.hpp>
-//#include <sstream>
-//#include <map>
-
 #include "libtb/libtb.hpp"
 #include "libtb/verilator.hpp"
 #include <gtest/gtest.h>
@@ -44,7 +40,6 @@ using word_type = uint32_t;
   __func(has_set_0_r, bool)                     \
   __func(has_set_1_r, bool)                     \
   __func(has_set_more_than_1_r, bool)
-
 
 struct Stimulus {
   friend std::ostream & operator<<(std::ostream & os, const Stimulus & stim) {

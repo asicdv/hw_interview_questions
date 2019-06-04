@@ -25,5 +25,11 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-emit_answer(tb_missing_duplicated_word
-  missing_duplicated_word.sv missing_duplicated_word.cpp)
+emit_solution(
+  TARGET
+  tb_missing_duplicated_word
+  VTOP
+  missing_duplicated_word.sv
+  TB
+  missing_duplicated_word.cpp
+  )

@@ -25,111 +25,199 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-#include <libtb2.hpp>
-#include <vector>
-#include <algorithm>
+#include "libtb/libtb.hpp"
+#include "libtb/verilator.hpp"
+#include <gtest/gtest.h>
 #include "vobj/Vmissing_duplicated_word.h"
+
+using word_type = uint32_t;
 
 #define PORTS(__func)                           \
   __func(state_upt, bool)                       \
-  __func(state_id, uint32_t)                    \
-  __func(state_dat, uint32_t)                   \
+  __func(state_id, word_type)                   \
+  __func(state_dat, word_type)                  \
   __func(cntrl_start, bool)                     \
   __func(cntrl_busy_r, bool)                    \
-  __func(cntrl_dat_r, uint32_t)
+  __func(cntrl_dat_r, word_type)
 
-typedef Vmissing_duplicated_word uut_t;
+struct Stimulus {
+  friend std::ostream & operator<<(std::ostream & os, const Stimulus & stim) {
+    return os << "'{x=" << stim.x() << "}";
+  }
+  Stimulus(word_type x) : x_(x) {}
+  word_type x() const { return x_; }
+ private:
+  word_type x_;
+};
 
-const int N = 8;
+struct Expect {
+  friend std::ostream & operator<<(std::ostream & os, const Expect & res) {
+    return os << "'{e=" << res.y() << "}";
+  }
+  friend bool operator==(const Expect & a, const Expect & b) {
+    return (a.y() == b.y());
+  }
+  Expect() {}
+  Expect(word_type y) : y_(y) {}
+  word_type y() const { return y_; }
+ private:
+  word_type y_;
+};
 
-struct MissingDuplicateWordTb : libtb2::Top<MissingDuplicateWordTb> {
-  SC_HAS_PROCESS(MissingDuplicateWordTb);
-  MissingDuplicateWordTb(sc_core::sc_module_name mn = "t")
-    : uut_("uut") {
-    //
-    resetter_.clk(clk_);
-    resetter_.rst(rst_);
-    //
-    sampler_.clk(clk_);
-    //
-    wd_.clk(clk_);
-    //
-    uut_.clk(clk_);
-    uut_.rst(rst_);
+struct TOP : tb::Top {
+  using stimulus_type = Stimulus;
+  using expected_type = Expect;
+
+  TOP() {
+    v.rst(rst);
+    v.clk(clk);
 #define __bind_signals(__name, __type)          \
-    uut_.__name(__name ## _);
+    v.__name(__name);
     PORTS(__bind_signals)
 #undef __bind_signals
-
-    SC_THREAD(t_stimulus);
+    start_tracing();
   }
-private:
-  void t_stimulus() {
-    resetter_.wait_reset_done();
-
-    cntrl_start_ = false;
-    while (true) {
-      const uint32_t missing = initialize();
-
-      cntrl_start_ = true;
-      wait(clk_.posedge_event());
-      cntrl_start_ = false;
-      do {
-        wait(sampler_.sample());
-      } while (cntrl_busy_r_);
-      const uint32_t detected = cntrl_dat_r_;
-
-      LOGGER(INFO) << " Missing = " << missing
-                   << " Detected = " << detected << "\n";
-      LIBTB2_ERROR_ON(missing != detected);
-    }
+  ~TOP() {
+    stop_tracing();
   }
-  uint32_t initialize() {
-    struct n_constraint : scv_constraint_base {
-      scv_smart_ptr<uint32_t> p;
-      SCV_CONSTRAINT_CTOR(n_constraint) {
-        SCV_CONSTRAINT((p() >= 0) && (p() < 32));
-      }
-    } n_constraint("n_constraint");
-
-    std::vector<uint32_t> ns;
-    while (ns.size() != (N + 1)) {
-      n_constraint.next();
-      const uint32_t n = *n_constraint.p;
-      if (std::find(ns.begin(), ns.end(), n) == ns.end())
-        ns.push_back(n);
-    }
-
-    for (int i = 0; i < N + 1; i++) {
-      if (i < N) {
-        state_upt_ = true;
-        state_id_ = i;
-        state_dat_ = ns [i];
-        LOGGER(DEBUG) << "Update id = " << i << " dat = " << ns [i] << "\n";
-        wait(clk_.posedge_event());
-      }
-      state_dat_ = ns [i];
-      state_id_ = i + N;
-      LOGGER(DEBUG) << "Update id = " << (i + N) << " dat = " << ns [i] << "\n";
-      wait(clk_.posedge_event());
-    }
-    state_upt_ = false;
-    return ns.back();
+  void t_state_idle() {
+    state_upt = false;
   }
-  sc_core::sc_clock clk_;
-  sc_core::sc_signal<bool> rst_;
-#define __declare_signals(__name, __type)       \
-  sc_core::sc_signal<__type> __name##_;
-  PORTS(__declare_signals)
-#undef __declare_signals
-  libtb2::Sampler sampler_;
-  libtb2::Resetter resetter_;
-  libtb2::SimWatchDogCycles wd_;
-  uut_t uut_;
+  void t_state_set(word_type id, word_type dat) {
+    state_upt = true;
+    state_id = id;
+    state_dat = dat;
+    t_await_cycles(1);
+  }
+  void t_apply_reset() {
+    rst = true;
+    t_await_cycles(2);
+    rst = false;
+    t_await_cycles(2);
+  }
+  void t_cntrl_idle() {
+    cntrl_start = false;
+  }
+  void t_cntrl_start() {
+    cntrl_start = true;
+    t_await_cycles(1);
+    t_cntrl_idle();
+  }
+  Expect get_expect() const { return Expect{cntrl_dat_r}; }
+  void t_cntrl_await_not_busy() {
+    while (cntrl_busy_r)
+      t_await_cycles(1);
+  }
+  void t_await_cycles(std::size_t n = 1) {
+    while (n--)
+      wait(clk.negedge_event());
+  }
+  Vmissing_duplicated_word v{"missing_duplicated_word"};
+  ::sc_core::sc_signal<bool> rst{"rst"};
+  ::sc_core::sc_clock clk{"clk"};
+#define __declare_signal(__name, __type)        \
+  ::sc_core::sc_signal<__type> __name{#__name};
+  PORTS(__declare_signal)
+#undef __declare_signal
+ private:
+  void start_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    Verilated::traceEverOn(true);
+    vcd_ = std::make_unique<VerilatedVcdSc>();
+    v.trace(vcd_.get(), 99);
+    vcd_->open("sim.vcd");
+#endif
+  }
+  void stop_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    vcd_->close();
+#endif
+  }
+#ifdef OPT_ENABLE_TRACE
+  std::unique_ptr<VerilatedVcdSc> vcd_;
+#endif
 };
-SC_MODULE_EXPORT(MissingDuplicateWordTb);
+
+namespace {
+
+TOP top;
+tb::TaskRunner TaskRunner;
+
+} // namespace
+
+struct TestCase {
+  friend std::ostream & operator<<(std::ostream & os, const TestCase & t) {
+    os << "'{expect=" << t.expect() << ", ";
+    const std::vector<word_type> & words{t.words()};
+    for (std::size_t i = 0; i < words.size(); i++)
+      os << (i == 0 ? "[" : " ") << words[i];
+    os << "]";
+    return os << "}";
+  }
+  
+  static TestCase generate(word_type w, word_type n) {
+    tb::Random::UniformRandomInterval<word_type> rnd((1 << w) - 1);
+    tb::Random::NotPriorPredicate<word_type> pred;
+    tb::Random::Filter<tb::Random::UniformRandomInterval<word_type>,
+                       tb::Random::NotPriorPredicate<word_type> > filter{rnd, pred};
+    
+    TestCase t;
+    for (std::size_t n = 0; n < 8; n++) {
+      const word_type duplicated{filter()};
+
+      t.words_.push_back(duplicated);
+      t.words_.push_back(duplicated);
+    }
+    const word_type not_duplicated{filter()};
+    t.words_.push_back(not_duplicated);
+    t.expect_ = Expect{not_duplicated};
+    tb::Random::shuffle(t.words_.begin(), t.words_.end());
+    return t;
+  }
+
+  Expect expect() const { return expect_; }
+  const std::vector<word_type> & words() const { return words_; }
+ private:
+  Expect expect_;
+  std::vector<word_type> words_;
+};
+
+TEST(MissingDuplicateWordTest, Basic) {
+  const std::size_t OPT_W{5}, OPT_N{17};
+  struct DriverScenario : ::tb::Task {
+    void add(const TestCase & c) { tests_.push_back(c); }
+    bool is_completed() const override { return is_completed_; }
+    void execute() override {
+      top.t_apply_reset();
+      for (const TestCase & c : tests_) {
+        for (std::size_t id = 0; id < c.words().size(); id++)
+          top.t_state_set(id, c.words()[id]);
+        top.t_state_idle();
+
+        top.t_cntrl_start();
+        top.t_cntrl_await_not_busy();
+
+        const Expect actual{top.get_expect()};
+        const Expect expect{c.expect()};
+        ASSERT_EQ(actual, expect);
+      }
+      is_completed_ = true;
+    }
+   private:
+    bool is_completed_{false};
+    std::vector<TestCase> tests_;
+  };
+  std::unique_ptr<DriverScenario> task =
+      std::make_unique<DriverScenario>();
+  const std::size_t N{1024 << 3};
+  for (std::size_t i = 0; i < N; i++)
+    task->add(TestCase::generate(OPT_W, OPT_N));
+  TaskRunner.set_task(std::move(task));
+  TaskRunner.run_until_exhausted(true);
+}
 
 int sc_main(int argc, char ** argv) {
-  MissingDuplicateWordTb tb;
-  return libtb2::Sim::start(argc, argv);
+  ::testing::InitGoogleTest(&argc, argv);
+  ::tb::initialize(argc, argv);
+  return RUN_ALL_TESTS();
 }

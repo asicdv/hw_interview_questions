@@ -31,12 +31,15 @@
 #include <random>
 #include <limits>
 #include <random>
+#include <algorithm>
 
 namespace tb {
 
 struct Random {
   template <typename T>
   struct UniformRandomInterval {
+    using value_type = T;
+    
     UniformRandomInterval(T hi = std::numeric_limits<T>::max(),
                           T lo = std::numeric_limits<T>::min())
         : hi_(hi), lo_(lo) {
@@ -52,6 +55,35 @@ struct Random {
     std::mt19937 mt_;
     std::uniform_int_distribution<T> dst_;
     T lo_, hi_;
+  };
+
+  template<typename RND, typename FN>
+  struct Filter {
+    using value_type = typename RND::value_type;
+    
+    Filter(RND & rnd, FN & fn) : rnd_(rnd), fn_(fn) {}
+    value_type operator()() {
+      value_type v;
+      do { v = rnd_(); } while (!fn_(v));
+      return v;
+    }
+   private:
+    FN & fn_;
+    RND & rnd_;
+  };
+
+  template<typename T>
+  struct NotPriorPredicate {
+    void reset() { prior_.clear(); }
+    bool operator()(const T & t) {
+      if (std::find(prior_.begin(), prior_.end(), t) == prior_.end()) {
+        prior_.push_back(t);
+        return true;
+      }
+      return false;
+    }
+   private:
+    std::vector<T> prior_;
   };
 
   template<typename T>
@@ -74,6 +106,11 @@ struct Random {
     UniformRandomInterval<std::size_t> r_;
     std::vector<T> v_;
   };
+
+  template<typename RndIt>
+  static void shuffle(RndIt begin, RndIt end) {
+    std::shuffle(begin, end, std::mt19937{Random::rd_()});
+  }
 
   static void set_seed(std::size_t seed) { Random::seed_ = seed; }
 
