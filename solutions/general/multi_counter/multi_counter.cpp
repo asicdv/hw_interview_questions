@@ -208,14 +208,14 @@ struct MultiCounterModel {
 
 const std::size_t OP_CNTRS_N{256};
 const std::size_t OP_CNTRS_W{32};
+const std::size_t N{1024 << 4};
 
 TOP top;
 tb::TaskRunner TaskRunner;
 
 } // namespace
 
-TEST(MultiCounterTest, Basic) {
-  const std::size_t N{1024 << 4};
+TEST(MultiCounterTest, MultipleID) {
   const std::size_t ACTIVE_IDS{16};
   auto task = std::make_unique<
     tb::BasicPassValidNotBusyTask<TOP> >(top);
@@ -260,7 +260,7 @@ TEST(MultiCounterTest, Basic) {
   }
   
   TaskRunner.set_task(std::move(task));
-  TaskRunner.run_until_exhausted(true);
+  TaskRunner.run_until_exhausted();
 }
 
 int sc_main(int argc, char ** argv) {
