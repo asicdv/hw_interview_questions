@@ -25,4 +25,11 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-emit_answer(tb_zero_indices_fast zero_indices_fast.sv zero_indices_fast.cpp)
+emit_solution(
+  TARGET
+  tb_zero_indices_fast
+  VTOP
+  zero_indices_fast.sv
+  TB
+  zero_indices_fast.cpp
+  )

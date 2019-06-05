@@ -25,13 +25,13 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-#include <libtb2.hpp>
-#include <vector>
-#include <iterator>
-#include <algorithm>
-#include <bitset>
+#include "libtb/libtb.hpp"
+#include "libtb/verilator.hpp"
+#include <gtest/gtest.h>
 #include "vobj/Vzero_indices_fast.h"
-typedef Vzero_indices_fast uut_t;
+
+using in_type  = sc_bv<128>;
+using out_type = uint32_t;
 
 #define PORTS(__func)                           \
   __func(in_vector, sc_bv<128>)                 \
@@ -40,121 +40,146 @@ typedef Vzero_indices_fast uut_t;
   __func(resp_valid_r, bool)                    \
   __func(resp_index_r, uint32_t)
 
-typedef Vzero_indices_fast uut_t;
-
-struct ZeroIndicesXActIntf : sc_core::sc_interface {
-  virtual void issue(const sc_bv<128> & x) = 0;
+struct Stimulus {
+  friend std::ostream & operator<<(std::ostream & os, const Stimulus & stim) {
+    return os << "'{"
+              << "w=" <<stim.w()
+              << "}";
+  }
+  Stimulus(in_type w) : w_(w) {}
+  in_type w() const { return w_; }
+ private:
+  in_type w_;
 };
 
-struct ZeroIndicesXAct : ZeroIndicesXActIntf, sc_core::sc_module {
-  sc_core::sc_in<bool> clk;
-  sc_core::sc_out<sc_bv<128> > in_vector;
-  sc_core::sc_out<bool> in_start;
-  sc_core::sc_in<bool> in_busy_r;
-  ZeroIndicesXAct(sc_core::sc_module_name mn = "xact")
-    : sc_core::sc_module(mn)
-    , clk("clk")
-    , in_vector("in_vector")
-    , in_start("in_start")
-    , in_busy_r("in_busy_r")
-  {}
-  void issue(const sc_bv<128> & x) {
-    in_start = true;
-    in_vector = x;
-    wait(clk.posedge_event());
-    idle();
+struct Expect {
+  friend std::ostream & operator<<(std::ostream & os, const Expect & res) {
+    return os << "'{idx=" << res.idx() << "}";
   }
-private:
-  void idle() {
+  friend bool operator==(const Expect & a, const Expect & b) {
+    if (a.idx() != b.idx()) return false;
+    return true;
+  }
+  Expect() : is_valid_(false) {}
+  Expect(out_type idx) : idx_(idx), is_valid_(true) {}
+  bool is_valid() const { return is_valid_; }
+  out_type idx() const { return idx_; }
+ private:
+  bool is_valid_{true};
+  out_type idx_;
+};
+
+struct TOP : ::tb::Top {
+  using stimulus_type = Stimulus;
+  using expected_type = Expect;
+  
+  TOP() {
+    v.rst(rst);
+    v.clk(clk);
+#define __bind_signals(__name, __type)          \
+    v.__name(__name);
+    PORTS(__bind_signals)
+#undef __bind_signals
+    start_tracing();
+  }
+  ~TOP() {
+    stop_tracing();
+  }
+  void set_idle() {
     in_start = false;
-    in_vector = 0;
+    in_vector = in_type{};
   }
+  void t_set_stimulus(const Stimulus & stim) {
+    t_wait_not_busy();
+    in_start = true;
+    in_vector = stim.w();
+    t_await_cycles();
+    set_idle();
+  }
+  bool out_is_valid() const { return resp_valid_r; }
+  Expect get_expect() const { return Expect{resp_index_r}; };
+  void t_apply_reset() {
+    rst = true;
+    t_await_cycles(2);
+    rst = false;
+    t_await_cycles(2);
+  }
+  void t_wait_not_busy() {
+    while (in_busy_r)
+      t_await_cycles();
+  }
+  void t_await_cycles(std::size_t n = 1) {
+    while (n--)
+      wait(clk.negedge_event());
+  }
+  Vzero_indices_fast v{"zero_indices_fast"};
+  ::sc_core::sc_signal<bool> rst{"rst"};
+  ::sc_core::sc_clock clk{"clk"};
+#define __declare_signal(__name, __type)        \
+  ::sc_core::sc_signal<__type> __name{#__name};
+  PORTS(__declare_signal)
+#undef __declare_signal
+ private:
+  void start_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    Verilated::traceEverOn(true);
+    vcd_ = std::make_unique<VerilatedVcdSc>();
+    v.trace(vcd_.get(), 99);
+    vcd_->open("sim.vcd");
+#endif
+  }
+  void stop_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    vcd_->close();
+#endif
+  }
+#ifdef OPT_ENABLE_TRACE
+  std::unique_ptr<VerilatedVcdSc> vcd_;
+#endif
 };
 
-struct ZeroIndicesFastTb : libtb2::Top<ZeroIndicesFastTb> {
-  sc_core::sc_port<ZeroIndicesXActIntf> p;
-  SC_HAS_PROCESS(ZeroIndicesFastTb);
-  ZeroIndicesFastTb(sc_core::sc_module_name mn = "t")
-    : uut_("uut"), p("p"), xact_("xact")
-  {
-    //
-    resetter_.clk(clk_);
-    resetter_.rst(rst_);
-    //
-    p.bind(xact_);
-    xact_.clk(clk_);
-    xact_.in_vector(in_vector_);
-    xact_.in_start(in_start_);
-    xact_.in_busy_r(in_busy_r_);
-    //
-    wd_.clk(clk_);
-    sampler_.clk(clk_);
-    //
-    uut_.clk(clk_);
-    uut_.rst(rst_);
-#define __bind_ports(__name, __type)            \
-    uut_.__name(__name ## _);
-    PORTS(__bind_ports)
-#undef __bind_ports
+namespace {
 
-    SC_THREAD(t_stimulus);
-    SC_METHOD(m_checker);
-    sensitive << sampler_.sample();
-    dont_initialize();
+TOP top;
+tb::TaskRunner TaskRunner;
+
+template<typename RND>
+in_type random_in(RND & rnd) {
+  in_type in;
+  for (std::size_t n = 0; n < 4; n++)
+    in.range((n + 1) * 32 - 1, n * 32) = rnd();
+  return in;
+}
+
+std::vector<out_type> zeros_in_word(in_type w) {
+  std::vector<out_type> v;
+  for (std::size_t i = 0; i < 128; i++) {
+    if (!w.get_bit(i))
+      v.push_back(i);
   }
-private:
-  void t_stimulus() {
-    resetter_.wait_reset_done();
+  return v;
+}
 
-    scv_smart_ptr<sc_bv<128> > in_vector;
-    while (true) {
+} // namespace 
 
-      in_vector->next();
+TEST(ZeroIndicesFastTest, Basic) {
+  const std::size_t n{1024 << 3};
+  auto task = std::make_unique<
+    tb::BasicPassValidNotBusyTask<TOP> >(top);
 
-      const sc_bv<128> actual = *in_vector;
-      LOGGER(INFO) << "Issue new word = "
-                   << actual
-                   << " zero count = " << libtb2::popcount(~actual)
-                   << "\n";
-      zero_indices_.clear();
-      libtb2::find_bits2(actual, std::back_inserter(zero_indices_));
-      std::reverse(zero_indices_.begin(), zero_indices_.end());
-      p->issue(actual);
-
-      if (!in_busy_r_)
-        wait(in_busy_r_.posedge_event());
-
-      while (in_busy_r_)
-        wait(clk_.posedge_event());
-    }
+  tb::Random::UniformRandomInterval<uint32_t> rnd{};
+  for (std::size_t i = 0; i < n; i++) {
+    const Stimulus stim{random_in(rnd)};
+    task->add_stimulus(stim);
+    for (out_type w : zeros_in_word(stim.w()))
+      task->add_expected(Expect{w});
   }
-  void m_checker() {
-    if (resp_valid_r_) {
-      LIBTB2_ERROR_ON(zero_indices_.size() == 0);
-
-      const uint32_t actual = resp_index_r_;
-      const uint32_t expected = zero_indices_.back(); zero_indices_.pop_back();
-
-      LIBTB2_ERROR_ON(actual != expected);
-      LOGGER(INFO) << "\tIndex = " << actual << " (" << expected << ")\n";
-    }
-  }
-  std::vector<std::size_t> zero_indices_;
-  ZeroIndicesXAct xact_;
-  sc_core::sc_clock clk_;
-  sc_core::sc_signal<bool> rst_;
-#define __declare_signals(__name, __type)       \
-  sc_core::sc_signal<__type> __name ## _;
-  PORTS(__declare_signals)
-#undef __declare_signals
-  libtb2::Resetter resetter_;
-  libtb2::Sampler sampler_;
-  libtb2::SimWatchDogCycles wd_;
-  uut_t uut_;
-};
-SC_MODULE_EXPORT(ZeroIndicesFastTb);
+  TaskRunner.set_task(std::move(task));
+  TaskRunner.run_until_exhausted(true);
+}
 
 int sc_main(int argc, char ** argv) {
-  ZeroIndicesFastTb tb;
-  return libtb2::Sim::start(argc, argv);
+  ::testing::InitGoogleTest(&argc, argv);
+  ::tb::initialize(argc, argv);
+  return RUN_ALL_TESTS();
 }
