@@ -25,4 +25,11 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-emit_answer(tb_pack pack.sv pack.cpp)
+emit_solution(
+  TARGET
+  tb_pack
+  VTOP
+  pack.sv
+  TB
+  pack.cpp
+  )

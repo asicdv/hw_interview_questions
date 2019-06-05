@@ -37,6 +37,9 @@ template<typename T>
 constexpr bool bit(const T & t, std::size_t i) { return (t >> i) & 0x1; }
 
 template<typename T>
+constexpr void set_bit(T & t, std::size_t i) { t |= (1 << i); }
+
+template<typename T>
 std::size_t pop_count(T t) {
   std::size_t cnt{0};
   while (t) {

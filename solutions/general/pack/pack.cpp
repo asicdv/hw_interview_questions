@@ -25,195 +25,176 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-#include <libtb2.hpp>
-#include <deque>
-#include <sstream>
-
+#include "libtb/libtb.hpp"
+#include "libtb/verilator.hpp"
+#include <gtest/gtest.h>
 #include "vobj/Vpack.h"
+
+using word_type = ::sc_dt::sc_bv<256>;
+using valid_type = uint32_t;
 
 #define PORTS(__func)                           \
   __func(in_pass, bool)                         \
-  __func(in_w, sc_bv<256>)                      \
-  __func(in_vld_w, uint32_t)                    \
+  __func(in_w, word_type)                       \
+  __func(in_vld_w, valid_type)                  \
   __func(out_pass_r, bool)                      \
-  __func(out_r, sc_bv<256>)                     \
-  __func(out_vld_r, uint32_t)
+  __func(out_r, word_type)                      \
+  __func(out_vld_r, valid_type)
 
-struct PackTb : libtb2::Top<Vpack> {
-  struct Expectation {
-    Expectation() {
-      n = 0;
-      for (int i = 0; i < 8; i++) {
-        x [i] = 0;
-        valid [i] = false;
-      }
+struct Stimulus {
+  friend std::ostream & operator<<(std::ostream & os, const Stimulus & stim) {
+    return os << "'{"
+              << "w=" << stim.w().to_string(SC_HEX) << " "
+              << "vld=" << stim.vld()
+              << "}";
+  }
+  Stimulus(word_type w, valid_type vld) : w_(w), vld_(vld) {}
+  word_type w() const { return w_; }
+  valid_type vld() const { return vld_; }
+ private:
+  word_type w_;
+  valid_type vld_;
+};
+
+struct Expect {
+  friend std::ostream & operator<<(std::ostream & os, const Expect & res) {
+    return os << "'{w=" << res.w().to_string(SC_HEX) << ", vld=" << res.vld() << "}";
+  }
+  friend bool operator==(const Expect & a, const Expect & b) {
+    if (a.vld() != b.vld()) return false;
+    valid_type vld{a.vld()};
+    for (std::size_t i = 0; vld != 0; i++, vld >>= 1) {
+      const word_type & a_w{a.w()};
+      const word_type & b_w{b.w()};
+
+      if (a_w.get_word(i) != b_w.get_word(i))
+        return false;
     }
-    std::string to_string() const {
-      std::stringstream ss;
-      ss << "{";
-      for (int i = 0; i < 8; i++) {
-        if (i != 0)
-          ss << ",";
-        
-        ss << i << ":(v:" << valid [i]
-           << " d:" << std::hex << x [i] << ")";
-      }
-      ss << ", expect: " << bv.to_string(SC_HEX)
-         << "}";
-      return ss.str();
-    }
-    void finalize() {
-      bv = 0;
-      for (int i = 0, j = 0; i < 8; i++) {
-        if (valid [i])
-          bv.set_word(j++, x [i]);
-      }
-    }
-    uint32_t x [8];
-    bool valid [8];
-    sc_bv<256> bv;
-    std::size_t n;
-  };
+    return true;
+  }
+  Expect() : is_valid_(false) {}
+  Expect(word_type w, valid_type vld) : w_(w), vld_(vld), is_valid_(true) {}
+  bool is_valid() const { return is_valid_; }
+  word_type w() const { return w_; }
+  valid_type vld() const { return vld_; }
+ private:
+  bool is_valid_{true};
+  word_type w_;
+  valid_type vld_;
+};
+
+struct TOP : ::tb::Top {
+  using stimulus_type = Stimulus;
+  using expected_type = Expect;
   
-  SC_HAS_PROCESS(PackTb);
-  PackTb(sc_core::sc_module_name mn = "t")
-      : uut_("uut")
-#define __construct_ports(__name, __type)       \
-        , __name ## _(#__name)
-        PORTS(__construct_ports)
-#undef __construct_ports
-      , clk_("clk")
-      , rst_("rst") {
-    uut_.clk(clk_);
-    uut_.rst(rst_);
+  TOP() {
+    v.rst(rst);
+    v.clk(clk);
 #define __bind_signals(__name, __type)          \
-    uut_.__name(__name ## _);
+    v.__name(__name);
     PORTS(__bind_signals)
 #undef __bind_signals
-
-    resetter_.clk(clk_);
-    resetter_.rst(rst_);
-
-    sampler_.clk(clk_);
-    
-    SC_METHOD(m_check_output);
-    sensitive << sampler_.sample();
-    dont_initialize();
-
-    SC_THREAD(t_stimulus);
-
-    generate_stimulus(1024 << 1);
-    register_uut(uut_);
-    vcd_on();
-
-    error_ = false;
-    j_ = 0;
-  };
- private:
-  void generate_stimulus(std::size_t cnt = 16) {
-    scv_smart_ptr<bool> do_value;
-    scv_smart_ptr<uint32_t> x_ptr;
-
-    while (cnt-- != 0) {
-      Expectation e;
-
-      for (uint32_t i = 0; i < 8; i++, do_value->next()) {
-        if (*do_value) {
-          e.x [i] = *x_ptr;
-          e.valid [i] = true;
-          e.n++;
-
-          x_ptr->next();
-        }
-      }
-      e.finalize();
-
-      expect_.push_back(e);
-    }
+    start_tracing();
   }
-  void t_stimulus() {
-    in_pass_ = false;
-    in_w_ = 0;
-    in_vld_w_ = 0;
-
-    resetter_.wait_reset_done();
-    wait(20, SC_NS);
-
-    for (std::size_t i = 0; i < expect_.size(); i++) {
-      const Expectation & e = expect_[i];
-
-      uint32_t val_in_vld_w = 0;
-      sc_bv<256> val_in_w;
-      for (int j = 0; j < 8; j++) {
-        if (e.valid [j])
-          val_in_vld_w |= (1 << j);
-        
-        val_in_w.set_word(j, e.x[j]);
-      }
-      in_pass_ = true;
-      in_w_ = val_in_w;
-      in_vld_w_ = val_in_vld_w;
-      wait(clk_.negedge_event());
-      wait(clk_.posedge_event());
-      in_pass_ = false;
-      in_vld_w_ = 0;
-
-      if (error_)
-        break;
-    }
-
-    wait(100, SC_NS);
-    sc_core::sc_stop();
+  ~TOP() {
+    stop_tracing();
   }
-  void m_check_output() {
-    if (out_pass_r_) {
-      if (j_ >= expect_.size()) {
-        error_ = true;
-
-        std::cout << "***** ERROR: unexpected output.\n";
-      }
-
-      uint32_t out_vld_r = out_vld_r_.read();
-      const std::size_t n = libtb2::popcount(out_vld_r);
-
-      const Expectation & e = expect_[j_++];
-      if (n != e.n) {
-        error_ = true;
-        std::cout << "**** ERROR: n = " << n << " != e.n = " << e.n << "\n";
-      }
-      sc_bv<256> out_r = out_r_.read();
-      for (int i = 0; i < 8; i++) {
-        if ((out_vld_r & (1 << i)) == 0) 
-          out_r.set_word(i, 0);
-      }
-      
-      if (out_r != e.bv) {
-        error_ = true;
-        
-        std::cout << sc_core::sc_time_stamp()
-                  << "**** ERROR: out mismatch"
-                  << "\nACTUAL = " << out_r.to_string(SC_HEX)
-                  << "\nEXPECT = " << e.to_string()
-                  << "\n";
-      }
-    }
+  void set_idle() {
+    in_pass = false;
+    in_w = word_type{};
+    in_vld_w = valid_type{};
   }
-  bool error_;
-  std::size_t i_, j_;
-  libtb2::Resetter resetter_;
-  libtb2::Sampler sampler_;
-  sc_core::sc_clock clk_;
-  sc_core::sc_signal<bool> rst_;
+  void t_set_stimulus(const Stimulus & stim) {
+    in_pass = true;
+    in_w = stim.w();
+    in_vld_w = stim.vld();
+    t_await_cycles();
+    set_idle();
+  }
+  bool out_is_valid() const { return out_pass_r; }
+  Expect get_expect() const { return Expect{out_r, out_vld_r}; };
+  void t_apply_reset() {
+    rst = true;
+    t_await_cycles(2);
+    rst = false;
+    t_await_cycles(2);
+  }
+  void t_await_cycles(std::size_t n = 1) {
+    while (n--)
+      wait(clk.negedge_event());
+  }
+  Vpack v{"pack"};
+  ::sc_core::sc_signal<bool> rst{"rst"};
+  ::sc_core::sc_clock clk{"clk"};
 #define __declare_signal(__name, __type)        \
-  sc_core::sc_signal<__type> __name##_;
+  ::sc_core::sc_signal<__type> __name{#__name};
   PORTS(__declare_signal)
 #undef __declare_signal
-  std::deque<Expectation> expect_;
-  Vpack uut_;
+ private:
+  void start_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    Verilated::traceEverOn(true);
+    vcd_ = std::make_unique<VerilatedVcdSc>();
+    v.trace(vcd_.get(), 99);
+    vcd_->open("sim.vcd");
+#endif
+  }
+  void stop_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    vcd_->close();
+#endif
+  }
+#ifdef OPT_ENABLE_TRACE
+  std::unique_ptr<VerilatedVcdSc> vcd_;
+#endif
 };
-SC_MODULE_EXPORT(PackTb);
 
-int sc_main(int argc, char **argv) {
-  PackTb tb("tb");
-  return libtb2::Sim::start(argc, argv);
+namespace {
+
+template<typename RND>
+Stimulus generate_stimulus(RND && rnd) {
+  word_type w{0};
+  for (std::size_t n = 0; n < 8; n++)
+    w.set_word(n, rnd());
+  const valid_type vld{rnd() & 0xFF};
+  return Stimulus{w, vld};
+}
+
+Expect generate_expect(const Stimulus & stim) {
+  word_type w{0};
+  valid_type vld{0};
+  for (std::size_t w_in = 0, w_out = 0; w_in < 8; w_in++) {
+    if (tb::bit(stim.vld(), w_in)) {
+      w.set_word(w_out, stim.w().get_word(w_in));
+      tb::set_bit(vld, w_out);
+      ++w_out;
+    }
+  }
+  return Expect{w, vld};
+}
+
+TOP top;
+tb::TaskRunner TaskRunner;
+
+} // namespace
+
+TEST(PackTest, Basic) {
+  const std::size_t n{1024 << 3};
+  auto task = std::make_unique<
+    tb::BasicPassValidNotBusyTask<TOP> >(top);
+
+  tb::Random::UniformRandomInterval<uint32_t> rnd{};
+  for (std::size_t i = 0; i < n; i++) {
+    const Stimulus stim{generate_stimulus(rnd)};
+    task->add_stimulus(stim);
+    task->add_expected(generate_expect(stim));
+  }
+  TaskRunner.set_task(std::move(task));
+  TaskRunner.run_until_exhausted(true);
+}
+
+int sc_main(int argc, char ** argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  ::tb::initialize(argc, argv);
+  return RUN_ALL_TESTS();
 }

@@ -25,8 +25,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-`include "libtb2.vh"
-`include "libv2_pkg.vh"
+`include "libv_pkg.vh"
 
 module pack #(parameter int N = 8, parameter int W = 32) (
 
@@ -135,8 +134,16 @@ module pack #(parameter int N = 8, parameter int W = 32) (
       //
       out_vld_w      = ~('1 << popcnt(in_vld_w));
 
+      // Force update to all words on output vector even where those
+      // words may not be valid. There is no functional impact from
+      // this change, however it simplifies the word comparison
+      // function in the verification environment.
       //
-      out_en         = out_vld_w;
+`ifdef FORCE_ZERO_NON_VALID
+      out_en  = '1;
+`else
+      out_en  = out_vld_w;
+`endif
 
     end // block: cntrl_PROC
 
@@ -170,5 +177,3 @@ module pack #(parameter int N = 8, parameter int W = 32) (
       out_pass_r <= out_pass_w;
   
 endmodule // pack
-
-  
