@@ -25,4 +25,11 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-emit_answer(tb_latency latency.sv latency.cpp)
+emit_solution(
+  TARGET
+  tb_latency
+  VTOP
+  latency.sv
+  TB
+  latency.cpp
+  )

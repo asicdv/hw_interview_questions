@@ -27,4 +27,4 @@
 
 add_subdirectory(gates_from_MUX2X1)
 add_subdirectory(using_full_adders)
-#add_subdirectory(latency)
+add_subdirectory(latency)

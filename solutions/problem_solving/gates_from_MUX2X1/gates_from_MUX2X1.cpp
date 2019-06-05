@@ -106,7 +106,7 @@ tb::TaskRunner TaskRunner;
 
 } // namespace
 
-TEST(DetectSequenceTest, Basic) {
+TEST(GatesFromMux2X1Test, Basic) {
   const std::size_t n{1024 << 10};
   auto task = std::make_unique<tb::BasicNotFailTask<TOP> >(top);
 

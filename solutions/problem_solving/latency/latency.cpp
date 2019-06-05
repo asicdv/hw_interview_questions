@@ -25,120 +25,164 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-#include <libtb2.hpp>
+#include "libtb/libtb.hpp"
+#include "libtb/verilator.hpp"
+#include <gtest/gtest.h>
 #include "vobj/Vlatency.h"
+
+using word_type = uint32_t;
 
 #define PORTS(__func)                           \
     __func(issue, bool)                         \
     __func(clear, bool)                         \
     __func(retire, bool)                        \
-    __func(issue_cnt_r, T)                      \
-    __func(aggregate_cnt_r, T)
+    __func(issue_cnt_r, word_type)              \
+    __func(aggregate_cnt_r, word_type)
 
-typedef Vlatency uut_t;
-
-template<typename T>
-struct LatencyTb : libtb2::Top<LatencyTb<T> > {
-  SC_HAS_PROCESS(LatencyTb);
-  LatencyTb(sc_core::sc_module_name mn = "t")
-    : uut_("uut") {
-    //
-    resetter_.clk(clk_);
-    resetter_.rst(rst_);
-    //
-    sampler_.clk(clk_);
-    //
-    wd_.clk(clk_);
-    //
-    dp_.clk(clk_);
-    dp_.in(issue_);
-    dp_.out(retire_);
-    //
-    uut_.clk(clk_);
-    uut_.rst(rst_);
-#define __bind_ports(__name, __type)            \
-    uut_.__name(__name ## _);
-    PORTS(__bind_ports)
-#undef __bind_ports
-
-    SC_THREAD(t_stimulus);
+struct TOP : tb::Top {
+  TOP() {
+    v.clk(clk);
+    v.rst(rst);
+#define __bind_signals(__name, __type)          \
+    v.__name(__name);
+    PORTS(__bind_signals)
+#undef __bind_signals
+    start_tracing();
   }
-private:
-  void t_stimulus() {
-    resetter_.wait_reset_done();
-
-    struct delay_constraint : scv_constraint_base {
-      scv_smart_ptr<std::size_t> p;
-      SCV_CONSTRAINT_CTOR(delay_constraint) {
-        SCV_CONSTRAINT((p() > 10) && (p() < 100));
-      }
-    } dconst("delay_constraint");
-
-    std::size_t N = 16;
-    LOGGER(INFO) << "Stimulus starts:\n";
-    while (N--) {
-      dconst.next();
-      const std::size_t delay = *dconst.p;
-      LOGGER(INFO) << "Running round latency = " << delay << "\n";
-      t_round(delay);
-    }
-    LOGGER(INFO) << "Stimulus complete!\n";
-    libtb2::Sim::end();
+  ~TOP() {
+    stop_tracing();
   }
-  void t_round(std::size_t delay) {
-    scv_bag<bool> ibag;
-    ibag.add(true, 20);
-    ibag.add(false, 80);
-    scv_smart_ptr<bool> i;
-    i->set_mode(ibag);
-
-    dp_.set_delay(delay);
-    dp_.clear();
-    t_clear();
-
-    std::size_t n = 0;
-    while (n < 16) {
-      i->next();
-      issue_ = *i;
-      if (issue_)
-        n++;
-      wait(clk_.posedge_event());
-      issue_ = false;
-
-      wd_.pat();
-    }
-    WAIT_FOR_CYCLES(clk_, 100);
-
-    const std::size_t latency = (aggregate_cnt_r_ / issue_cnt_r_);
-    LIBTB2_ERROR_ON(latency != delay);
-
-    LOGGER(INFO) << " Expected = " << delay
-                 << " Actual = " << latency
-                 << " aggregate_cnt = " << aggregate_cnt_r_
-                 << " issue_cnt = " << issue_cnt_r_
-                 << "\n";
+  void set_idle() {
+    issue = false;
+    clear = false;
+    retire = false;
   }
-  void t_clear() {
-    wait(clk_.posedge_event());
-    clear_ = true;
-    wait(clk_.posedge_event());
-    clear_ = false;
+  void set_issue(bool x = true) { issue = x; }
+  void set_clear(bool x = true) { clear = x; }
+  void set_retire(bool x = true) { retire = x; }
+  word_type get_issue_cnt_r() { return issue_cnt_r; }
+  word_type get_aggregate_cnt_r() { return aggregate_cnt_r; }
+  void t_await_cycles(std::size_t n = 1) {
+    while (n--)
+      wait(clk.negedge_event());
   }
-  sc_core::sc_clock clk_;
-  sc_core::sc_signal<bool> rst_;
+  void t_apply_reset() {
+    rst = true;
+    t_await_cycles(2);
+    rst = false;
+    t_await_cycles(2);
+  }
+  Vlatency v{"latency"};
+  ::sc_core::sc_clock clk{"clk"};
+  ::sc_core::sc_signal<bool> rst{"rst"};
 #define __declare_signal(__name, __type)        \
-  sc_core::sc_signal<__type> __name##_;
+  ::sc_core::sc_signal<__type> __name{#__name};
   PORTS(__declare_signal)
 #undef __declare_signal
-  libtb2::Resetter resetter_;
-  libtb2::Sampler sampler_;
-  libtb2::SimWatchDogCycles wd_;
-  libtb2::ConstantDelayPipe<bool> dp_;
-  uut_t uut_;
+ private:
+  void start_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    Verilated::traceEverOn(true);
+    vcd_ = std::make_unique<VerilatedVcdSc>();
+    v.trace(vcd_.get(), 99);
+    vcd_->open("sim.vcd");
+#endif
+  }
+  void stop_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    vcd_->close();
+#endif
+  }
+#ifdef OPT_ENABLE_TRACE
+  std::unique_ptr<VerilatedVcdSc> vcd_;
+#endif
 };
-SC_MODULE_EXPORT(LatencyTb<uint32_t>);
 
-int sc_main(int argc, char **argv) {
-  LatencyTb<uint32_t> tb;
-  return libtb2::Sim::start(argc, argv);
+namespace {
+
+struct LatencyModel {
+  explicit LatencyModel() {}
+  bool has_in_flight() const { return in_flight_cnt_ != 0; }
+
+  std::size_t aggregate_cnt() const { return aggregate_cnt_; }
+  std::size_t issue_cnt() const { return issue_cnt_; }
+  void issue() { issue_cnt_++; in_flight_cnt_++; }
+  void retire() { in_flight_cnt_--; }
+  void step() { aggregate_cnt_ += in_flight_cnt_; };
+ private:
+  std::size_t aggregate_cnt_{0}, issue_cnt_{0};
+  std::size_t in_flight_cnt_{0};
+};
+
+TOP top;
+tb::TaskRunner TaskRunner;
+
+} // namespace
+
+TEST(DetectSequenceTest, Basic) {
+  struct RunLatencyTask : ::tb::Task {
+    RunLatencyTask(TOP & top, std::size_t n = 1024) : top_(top), n_(n) {}
+    bool is_completed() const override { return is_completed_; }
+    void execute() override {
+      LatencyModel mdl{};
+      
+      tb::Random::Bag<bool> bg_issue;
+      bg_issue.add(true, 80);
+      bg_issue.add(false, 20);
+      bg_issue.finalize();
+
+      tb::Random::Bag<bool> bg_retire;
+      bg_retire.add(true, 80);
+      bg_retire.add(false, 20);
+      bg_retire.finalize();
+
+      // Issue/Retirements
+      top_.t_apply_reset();
+      for (std::size_t cycle = 0; cycle < n_; cycle++) {
+        const bool issue{bg_issue()};
+        const bool retire{mdl.has_in_flight() && bg_retire()};
+
+        top_.set_idle();
+        top_.set_issue(issue);
+        top_.set_retire(retire);
+
+        if (issue)
+          mdl.issue();
+        if (retire)
+          mdl.retire();
+
+        mdl.step();
+        top_.t_await_cycles();
+      }
+
+      // Wind up
+      while (mdl.has_in_flight()) {
+        top_.set_idle();
+        top_.set_retire(true);
+        mdl.retire();
+        mdl.step();
+        top_.t_await_cycles();
+      }
+
+      // Return to quiescent state.
+      top_.set_idle();
+
+      ASSERT_EQ(top_.get_issue_cnt_r(), mdl.issue_cnt());
+      ASSERT_EQ(top_.get_aggregate_cnt_r(), mdl.aggregate_cnt());
+
+      is_completed_ = true;
+    }
+   private:
+    TOP & top_;
+    bool is_completed_{false};
+    std::size_t n_;
+  };
+  auto task = std::make_unique<RunLatencyTask>(top);
+  TaskRunner.set_task(std::move(task));
+  TaskRunner.run_until_exhausted(true);
+}
+
+int sc_main(int argc, char ** argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
 }

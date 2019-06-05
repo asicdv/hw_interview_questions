@@ -100,8 +100,9 @@ struct Random {
   template<typename T>
   struct Bag {
     explicit Bag() {};
-    void add(const T & t, bool do_finalize = true) {
-      v_.push_back(t);
+    void add(const T & t, std::size_t weight = 1, bool do_finalize = true) {
+      while (weight--)
+        v_.push_back(t);
       if (do_finalize)
         finalize();
     }
