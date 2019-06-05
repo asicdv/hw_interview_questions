@@ -25,5 +25,12 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-emit_answer(tb_using_full_adders using_full_adders.sv using_full_adders.cpp)
+emit_solution(
+  TARGET
+  tb_using_full_adders
+  VTOP
+  using_full_adders.sv
+  TB
+  using_full_adders.cpp
+  )
 

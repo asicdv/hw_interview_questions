@@ -25,4 +25,11 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-emit_answer(tb_gates_from_MUX2X1 gates_from_MUX2X1.sv gates_from_MUX2X1.cpp)
+emit_solution(
+  TARGET
+  tb_gates_from_MUX2X1
+  VTOP
+  gates_from_MUX2X1.sv
+  TB
+  gates_from_MUX2X1.cpp
+  )

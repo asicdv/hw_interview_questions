@@ -25,7 +25,9 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-#include <libtb2.hpp>
+#include "libtb/libtb.hpp"
+#include "libtb/verilator.hpp"
+#include <gtest/gtest.h>
 #include "vobj/Vgates_from_MUX2X1.h"
 
 #define PORTS(__func)                           \
@@ -33,51 +35,89 @@
     __func(b, bool)                             \
     __func(fail, bool)
 
-typedef Vgates_from_MUX2X1 uut_t;
+struct Stimulus {
+  friend std::ostream & operator<<(std::ostream & os, const Stimulus & stim) {
+    return os << "'{a=" << stim.a() << ", b=" << stim.b() << "}";
+  }
+  Stimulus(bool a, bool b) : a_(a), b_(b) {}
+  bool a() const { return a_; }
+  bool b() const { return b_; }
+ private:
+  bool a_, b_;
+};
 
-struct GatesFromMUX2X1Tb : libtb2::Top<GatesFromMUX2X1Tb> {
-  SC_HAS_PROCESS(GatesFromMUX2X1Tb);
-  GatesFromMUX2X1Tb(sc_core::sc_module_name mn = "t")
-    : uut_("uut") {
-    sampler_.clk(clk_);
-    wd_.clk(clk_);
+struct TOP : tb::Top {
+  using stimulus_type = Stimulus;
+
+  TOP() {
 #define __bind_signals(__name, __type)          \
-    uut_.__name(__name ## _);
+    v.__name(__name);
     PORTS(__bind_signals)
 #undef __bind_signals
-
-    SC_METHOD(m_checker);
-    sensitive << sampler_.sample();
-    dont_initialize();
-    SC_THREAD(t_stimulus);
+    start_tracing();
   }
-private:
-  void t_stimulus() {
-    scv_smart_ptr<bool> a, b;
-    while (true) {
-      a->next();
-      b->next();
-      
-      a_ = *a; b_ = *b;
-      LOGGER(INFO) << "a = " << a_ << " b = " << b_ << "\n";
-      wait(clk_.posedge_event());
-    }
+  ~TOP() {
+    stop_tracing();
   }
-  void m_checker() {
-    LIBTB2_ERROR_ON(fail_);
+  void set_idle() {
+    a = false;
+    b = false;
   }
-  sc_core::sc_clock clk_;
-#define __declare_signals(__name, __type)       \
-  sc_core::sc_signal<__type> __name##_;
-  PORTS(__declare_signals)
-#undef __declare_signals
-  libtb2::Sampler sampler_;
-  libtb2::SimWatchDogCycles wd_;
-  uut_t uut_;
+  void t_set_stimulus(const stimulus_type & stim) {
+    a = stim.a();
+    b = stim.b();
+    t_await_cycles(1);
+    set_idle();
+  }
+  bool is_fail() const { return fail; }
+  void t_await_cycles(std::size_t n = 1) {
+    while (n--)
+      wait(clk.negedge_event());
+  }
+  Vgates_from_MUX2X1 v{"gates_from_MUX2X1"};
+  ::sc_core::sc_clock clk{"clk"};
+#define __declare_signal(__name, __type)        \
+  ::sc_core::sc_signal<__type> __name{#__name};
+  PORTS(__declare_signal)
+#undef __declare_signal
+ private:
+  void start_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    Verilated::traceEverOn(true);
+    vcd_ = std::make_unique<VerilatedVcdSc>();
+    v.trace(vcd_.get(), 99);
+    vcd_->open("sim.vcd");
+#endif
+  }
+  void stop_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    vcd_->close();
+#endif
+  }
+#ifdef OPT_ENABLE_TRACE
+  std::unique_ptr<VerilatedVcdSc> vcd_;
+#endif
 };
-SC_MODULE_EXPORT(GatesFromMUX2X1Tb);
+
+namespace {
+
+TOP top;
+tb::TaskRunner TaskRunner;
+
+} // namespace
+
+TEST(DetectSequenceTest, Basic) {
+  const std::size_t n{1024 << 10};
+  auto task = std::make_unique<tb::BasicNotFailTask<TOP> >(top);
+
+  tb::Random::UniformRandomInterval<bool> rnd{};
+  for (std::size_t i = 0; i < n; i++)
+    task->add_stimulus(Stimulus{rnd(), rnd()});
+  TaskRunner.set_task(std::move(task));
+  TaskRunner.run_until_exhausted(true);
+}
 
 int sc_main(int argc, char ** argv) {
-  GatesFromMUX2X1Tb tb;
-  return libtb2::Sim::start(argc, argv);
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
 }

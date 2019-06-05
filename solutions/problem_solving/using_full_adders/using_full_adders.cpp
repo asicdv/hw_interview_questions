@@ -25,69 +25,100 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-#include <libtb2.hpp>
-
+#include "libtb/libtb.hpp"
+#include "libtb/verilator.hpp"
+#include <gtest/gtest.h>
 #include "vobj/Vusing_full_adders.h"
 
+using word_type = uint32_t;
+
 #define PORTS(__func)                           \
-    __func(x, uint32_t)                         \
-    __func(fail, bool)
+  __func(x, word_type)                          \
+  __func(fail, bool)
 
-typedef Vusing_full_adders uut_t;
-
-template<typename T>
-struct UsingFullAddersTb : libtb2::Top<UsingFullAddersTb<T> > {
-  SC_HAS_PROCESS(UsingFullAddersTb);
-  UsingFullAddersTb(sc_core::sc_module_name mn = "t") : uut_("uut") {
-    //
-    wd_.clk(clk_);
-    //
-    resetter_.clk(clk_);
-    resetter_.rst(rst_);
-    //
-    sampler_.clk(clk_);
-    //
-    uut_.clk(clk_);
-    uut_.rst(rst_);
-#define __bind_ports(__name, __type)            \
-    uut_.__name(__name ## _);
-    PORTS(__bind_ports)
-#undef __bind_ports
-    SC_THREAD(t_stimulus);
-    SC_METHOD(m_fail);
-    this->sensitive << sampler_.sample();
-    this->dont_initialize();
+struct Stimulus {
+  friend std::ostream & operator<<(std::ostream & os, const Stimulus & stim) {
+    return os << "'{x=" << stim.x() << "}";
   }
-private:
-  void m_fail() {
-    LIBTB2_ERROR_ON(fail_);
-  }
-  void t_stimulus() {
-    const libtb2::Options & o = libtb2::Sim::get_options();
-    resetter_.wait_reset_done();
-    scv_smart_ptr<T> x;
-    while (true) {
-      x->next();
-      x_ = *x;
-      if (o.debug_on()) {
-        LOGGER(DEBUG) << "X=" << x_ << "\n";
-      }
-      wait(clk_.posedge_event());
-    }
-  }
-  sc_core::sc_clock clk_;
-  sc_core::sc_signal<bool> rst_;
-#define __declare_signals(__name, __type)       \
-  sc_core::sc_signal<__type> __name ## _;
-  PORTS(__declare_signals)
-#undef __declare_signals
-  libtb2::Resetter resetter_;
-  libtb2::Sampler sampler_;
-  libtb2::SimWatchDogCycles wd_;
-  uut_t uut_;
+  Stimulus(word_type x) : x_(x) {}
+  word_type x() const { return x_; }
+ private:
+  word_type x_;
 };
 
-int sc_main(int argc, char **argv) {
-  UsingFullAddersTb<uint32_t> tb;
-  return libtb2::Sim::start(argc, argv);
+struct TOP : tb::Top {
+  using stimulus_type = Stimulus;
+
+  TOP() {
+    v.clk(clk);
+    v.rst(rst);
+#define __bind_signals(__name, __type)          \
+    v.__name(__name);
+    PORTS(__bind_signals)
+#undef __bind_signals
+    start_tracing();
+  }
+  ~TOP() {
+    stop_tracing();
+  }
+  void set_idle() {
+    x = false;
+  }
+  void t_set_stimulus(const stimulus_type & stim) {
+    x = stim.x();
+    t_await_cycles(1);
+    set_idle();
+  }
+  bool is_fail() const { return fail; }
+  void t_await_cycles(std::size_t n = 1) {
+    while (n--)
+      wait(clk.negedge_event());
+  }
+  Vusing_full_adders v{"using_full_adders"};
+  ::sc_core::sc_clock clk{"clk"};
+  ::sc_core::sc_signal<bool> rst{"rst"};
+#define __declare_signal(__name, __type)        \
+  ::sc_core::sc_signal<__type> __name{#__name};
+  PORTS(__declare_signal)
+#undef __declare_signal
+ private:
+  void start_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    Verilated::traceEverOn(true);
+    vcd_ = std::make_unique<VerilatedVcdSc>();
+    v.trace(vcd_.get(), 99);
+    vcd_->open("sim.vcd");
+#endif
+  }
+  void stop_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    vcd_->close();
+#endif
+  }
+#ifdef OPT_ENABLE_TRACE
+  std::unique_ptr<VerilatedVcdSc> vcd_;
+#endif
+};
+
+namespace {
+
+TOP top;
+tb::TaskRunner TaskRunner;
+
+} // namespace
+
+TEST(DetectSequenceTest, Basic) {
+  const std::size_t n{1024 << 10};
+  auto task = std::make_unique<tb::BasicNotFailTask<TOP> >(top);
+
+  tb::Random::UniformRandomInterval<word_type> rnd{(1 << 6) - 1};
+  for (std::size_t i = 0; i < n; i++)
+    task->add_stimulus(Stimulus{rnd()});
+  TaskRunner.set_task(std::move(task));
+  TaskRunner.run_until_exhausted(true);
+}
+
+int sc_main(int argc, char ** argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
 }
