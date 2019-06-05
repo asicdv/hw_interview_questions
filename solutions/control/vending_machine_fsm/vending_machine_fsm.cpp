@@ -25,7 +25,9 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-#include <libtb2.hpp>
+#include "libtb/libtb.hpp"
+#include "libtb/verilator.hpp"
+#include <gtest/gtest.h>
 #include "vobj/Vvending_machine_fsm.h"
 
 #define PORTS(__func)                           \
@@ -34,144 +36,155 @@
   __func(vend, bool)                            \
   __func(change, bool)
 
-typedef Vvending_machine_fsm uut_t;
-
-struct VendingMachineFsmTb : libtb2::Top<VendingMachineFsmTb> {
-
-  SC_HAS_PROCESS(VendingMachineFsmTb);
-  VendingMachineFsmTb(sc_core::sc_module_name mn = "t")
-      : uut_("uut")
-#define __construct_signals(__name, __type)     \
-        , __name##_(#__name)
-        PORTS(__construct_signals)
-#undef __construct_signals
-  {
-    //
-    resetter_.clk(clk_);
-    resetter_.rst(rst_);
-    //
-    wd_.clk(clk_);
-    sampler_.clk(clk_);
-
-    SC_THREAD(t_stimulus);
-    
-    //
-    SC_METHOD(m_sample_vend);
-    sensitive << vend_.posedge_event();
-    dont_initialize();
-
-    SC_METHOD(m_sample_change);
-    sensitive << change_.posedge_event();
-    dont_initialize();
-
-    uut_.clk(clk_);
-    uut_.rst(rst_);
+struct TOP : tb::Top {
+  TOP() {
+    v.clk(clk);
+    v.rst(rst);
 #define __bind_signals(__name, __type)          \
-    uut_.__name(__name##_);
+    v.__name(__name);
     PORTS(__bind_signals)
 #undef __bind_signals
-
-    value_ = 0;
-    vend_n_ = 0;
-    change_n_ = 0;
+    start_tracing();
   }
-
-  void t_stimulus() {
-    LOGGER(INFO) << "Stimulus starts...\n";
-    test_0();
-    test_1();
-    LOGGER(INFO) << "Stimulus ends\n";
-
-    wait();
+  ~TOP() {
+    stop_tracing();
   }
-
-  void m_sample_vend() {
-    if (vend_)
-      vend_n_++;
+  void set_idle() {
+    nickel = false;
+    dime = false;
   }
-
-  void m_sample_change() {
-    if (change_)
-      change_n_++;
+  void set_nickel(bool x = true) { nickel = x; }
+  void set_dime(bool x = true) { dime = x; }
+  bool get_vend() const { return vend; }
+  bool get_change() const { return change; }
+  void t_await_cycles(std::size_t n = 1) {
+    while (n--)
+      wait(clk.negedge_event());
   }
-
-  void test_0() {
-    clear();
-
-    LOGGER(INFO) << "Test 0";
-    insert_nickel(); // 0.05
-    insert_nickel(); // 0.10
-    insert_nickel(); // 0.15
-    insert_nickel(); // 0.20
-    insert_nickel(); // 0.25
-    insert_nickel(); // 0.30
-    insert_nickel(); // 0.35
-    insert_nickel(); // 0.40
-    wait(10, SC_NS);
-    LIBTB2_ERROR_ON(vend_n_ != 1);
-
-    LOGGER(INFO) << "\tPass!\n";
+  void t_apply_reset() {
+    set_idle();
+    rst = true;
+    t_await_cycles(2);
+    rst = false;
+    t_await_cycles(2);
   }
-
-  void test_1() {
-    clear();
-
-    LOGGER(INFO) << "Test 1";
-    insert_nickel(); // 0.05
-    insert_nickel(); // 0.10
-    insert_nickel(); // 0.15
-    insert_nickel(); // 0.20
-    insert_nickel(); // 0.25
-    insert_dime();   // 0.35
-    insert_dime();   // 0.45
-    wait(10, SC_NS);
-    LIBTB2_ERROR_ON(change_n_ != 1);
-    LIBTB2_ERROR_ON(vend_n_ != 1);
-    
-    LOGGER(INFO) << "\tPass!\n";
+  Vvending_machine_fsm v{"vending_machine_fsm"};
+  ::sc_core::sc_clock clk{"clk"};
+  ::sc_core::sc_signal<bool> rst{"rst"};
+#define __declare_signal(__name, __type)        \
+  ::sc_core::sc_signal<__type> __name{#__name};
+  PORTS(__declare_signal)
+#undef __declare_signal
+ private:
+  void start_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    Verilated::traceEverOn(true);
+    vcd_ = std::make_unique<VerilatedVcdSc>();
+    v.trace(vcd_.get(), 99);
+    vcd_->open("sim.vcd");
+#endif
   }
-
-  void idle() {
-    nickel_ = false;
-    dime_ = false;
+  void stop_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    vcd_->close();
+#endif
   }
-
-  void clear() {
-    value_ = 0;
-    vend_n_ = 0;
-    change_n_ = 0;
-    wait(clk_.posedge_event());
-  }
-
-  void insert_nickel() {
-    nickel_ = true;
-    wait(clk_.posedge_event());
-    value_ += 5;
-    idle();
-  }
-
-  void insert_dime() {
-    dime_ = true;
-    wait(clk_.posedge_event());
-    value_ += 10;
-    idle();
-  }
-
-  libtb2::Resetter resetter_;
-  libtb2::SimWatchDogCycles wd_;
-  libtb2::Sampler sampler_;
-  sc_core::sc_clock clk_;
-  sc_core::sc_signal<bool> rst_;
-  std::size_t value_, vend_n_, change_n_;
-#define __declare_signals(__name, __type)       \
-  sc_core::sc_signal<__type> __name##_;
-  PORTS(__declare_signals)
-#undef __declare_signals
-  uut_t uut_;
+#ifdef OPT_ENABLE_TRACE
+  std::unique_ptr<VerilatedVcdSc> vcd_;
+#endif
 };
-SC_MODULE_EXPORT(VendingMachineFsmTb);
 
-int sc_main (int argc, char **argv) {
-  VendingMachineFsmTb tb;
-  return libtb2::Sim::start(argc, argv);
+namespace {
+
+struct VendingMachineModel {
+  VendingMachineModel() { reset(); }
+  
+  void set_nickel(bool x = true) { if (x) sum_ += 5; }
+  void set_dime(bool x = true) { if (x) sum_ += 10; }
+
+  std::size_t sum() const { return sum_; }
+  bool vend() const { return sum_ >= 40; }
+  bool change() const { return sum_ > 40; }
+
+  void reset() { sum_ = 0; }
+  void step() {}
+ private:
+  std::size_t sum_{0};
+};
+
+TOP top;
+tb::TaskRunner TaskRunner;
+
+} // namespace
+
+TEST(VendingMachineFsmTest, Basic) {
+  struct VendingMachineFsmTask : ::tb::Task {
+    VendingMachineFsmTask(TOP & top, std::size_t n = 1024)
+        : top_(top), n_(n) {}
+    void execute() override {
+      scenario_1();
+      scenario_2();
+      finish();
+    }
+   private:
+    void scenario_1() {
+      // Add dimes until machine vends
+      
+      tb::Random::Bag<bool> bg_do_coin;
+      bg_do_coin.add(true, 80);
+      bg_do_coin.add(false, 20);
+      bg_do_coin.finalize();
+
+      VendingMachineModel mdl{};
+      top_.t_apply_reset();
+
+      while (!mdl.vend()) {
+        top_.set_idle();
+        if (bg_do_coin()) {
+          top_.set_nickel();
+          mdl.set_nickel();
+        }
+        top_.t_await_cycles();
+      }
+      ASSERT_TRUE(top_.get_vend());
+      ASSERT_FALSE(top_.get_change());
+    }
+    void scenario_2() {
+      // Add dimes and nickle to cause machine to vend with change.
+
+      VendingMachineModel mdl{};
+      top_.t_apply_reset();
+
+      for (std::size_t i = 0; i < 7; i++) {
+        top_.set_nickel();
+        mdl.set_nickel();
+        top_.t_await_cycles();
+      }
+
+      ASSERT_FALSE(top_.get_vend());
+      ASSERT_FALSE(top_.get_change());
+
+      top_.set_idle();
+      top_.set_dime();
+      mdl.set_dime();
+      top_.t_await_cycles();
+      top_.set_idle();
+
+      ASSERT_TRUE(mdl.vend());
+      ASSERT_TRUE(mdl.change());
+      ASSERT_TRUE(top_.get_vend());
+      ASSERT_TRUE(top_.get_change());
+    }
+    TOP & top_;
+    std::size_t n_;
+  };
+  auto task = std::make_unique<VendingMachineFsmTask>(top);
+  TaskRunner.set_task(std::move(task));
+  TaskRunner.run_until_exhausted(true);
+}
+
+int sc_main(int argc, char ** argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  ::tb::initialize(argc, argv);
+  return RUN_ALL_TESTS();
 }

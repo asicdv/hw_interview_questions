@@ -25,4 +25,11 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-emit_answer(tb_vending_machine_fsm vending_machine_fsm.sv vending_machine_fsm.cpp)
+emit_solution(
+  TARGET
+  tb_vending_machine_fsm
+  VTOP
+  vending_machine_fsm.sv
+  TB
+  vending_machine_fsm.cpp
+  )

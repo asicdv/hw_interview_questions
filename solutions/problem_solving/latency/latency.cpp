@@ -119,7 +119,7 @@ tb::TaskRunner TaskRunner;
 
 } // namespace
 
-TEST(DetectSequenceTest, Basic) {
+TEST(LatencyTest, Basic) {
   struct RunLatencyTask : ::tb::Task {
     RunLatencyTask(TOP & top, std::size_t n = 1024) : top_(top), n_(n) {}
     bool is_completed() const override { return is_completed_; }

@@ -254,7 +254,7 @@ TEST(SIMDTest, Basic) {
 
   tb::Random::UniformRandomInterval<word_type> rnd;
   tb::Random::Bag<OpT> opbag;
-#define __op_add_to_bag(op) opbag.add(op, false);
+#define __op_add_to_bag(op) opbag.add(op, 1, false);
   OPS(__op_add_to_bag)
 #undef __op_add_to_bag
   opbag.finalize();

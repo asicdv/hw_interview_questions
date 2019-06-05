@@ -39,8 +39,12 @@ namespace tb {
 
 struct Task {
   virtual ~Task() {}
+  virtual bool is_finished() const { return finish_; }
   virtual bool is_completed() const { return false; }
   virtual void execute() = 0;
+  virtual void finish() { finish_ = true; }
+ private:
+  bool finish_{false};
 };
 
 template<typename TOP>

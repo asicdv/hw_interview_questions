@@ -42,7 +42,7 @@ void TaskRunner::run_until_exhausted(bool do_stop) {
   using namespace sc_core;
 
   e_start_tb_.notify(1, SC_NS);
-  while (!task_->is_completed())
+  while (!task_->is_completed() && !task_->is_finished())
     ::sc_core::sc_start(10, SC_US);
   if (do_stop)
     ::sc_core::sc_stop();
