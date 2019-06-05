@@ -185,10 +185,11 @@ module fsm_quicksort (
       //
       queue_idle  = '0;
       for (int i = 0; i < BANK_N; i++)
-        queue_idle [i]  = (bank_state_r [i].status == BANK_IDLE);
-      
+        queue_idle [i]  = (bank_state_r [i].status == BANK_IDLE) ||
+                          (bank_state_r [i].status == BANK_LOADING);
+
       //
-      queue_ready       = '0;
+      queue_ready  = '0;
       for (int i = 0; i < BANK_N; i++)
         queue_ready [i]  = (bank_state_r [i].status == BANK_READY);
 

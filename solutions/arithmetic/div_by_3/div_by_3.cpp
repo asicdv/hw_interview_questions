@@ -148,7 +148,7 @@ TEST(DivBy3Test, Basic) {
   auto task = std::make_unique<
     tb::BasicPassValidNotBusyTask<TOP> >(top);
 
-  tb::Random::UniformRandomInterval<uint32_t> rnd{1 << 16};
+  tb::Random::UniformRandomInterval<uint32_t> rnd{(1 << 16) - 1};
   for (std::size_t i = 0; i < n; i++) {
     const Stimulus stim{rnd()};
     task->add_stimulus(stim);
@@ -161,5 +161,6 @@ TEST(DivBy3Test, Basic) {
 
 int sc_main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
+  ::tb::initialize(argc, argv);
   return RUN_ALL_TESTS();
 }

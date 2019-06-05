@@ -47,16 +47,14 @@ struct Random {
     UniformRandomInterval(T hi = std::numeric_limits<T>::max(),
                           T lo = std::numeric_limits<T>::min())
         : hi_(hi), lo_(lo) {
-      mt_ = std::mt19937{Random::rd_()};
       dst_ = std::uniform_int_distribution<T>(lo_, hi_);
     }
 
     T lo() const { return lo_; }
     T hi() const { return hi_; }
-    T operator()() { return dst_(mt_); }
+    T operator()() { return dst_(Random::mt_); }
 
    private:
-    std::mt19937 mt_;
     std::uniform_int_distribution<T> dst_;
     T lo_, hi_;
   };
@@ -124,14 +122,15 @@ struct Random {
   //
   template<typename RndIt>
   static void shuffle(RndIt begin, RndIt end) {
-    std::shuffle(begin, end, std::mt19937{Random::rd_()});
+    std::shuffle(begin, end, Random::mt_);
   }
 
-  static void set_seed(std::size_t seed) { Random::seed_ = seed; }
+  static void set_seed(std::size_t seed) {
+    Random::mt_.seed(seed);
+  }
 
  private:
-  static std::random_device rd_;
-  static std::size_t seed_;
+  static std::mt19937 mt_;
 };
 
 } // namespace tb

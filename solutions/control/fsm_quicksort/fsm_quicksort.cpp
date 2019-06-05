@@ -119,7 +119,7 @@ struct TOP : tb::Top {
     unsorted_dat = word_type{};
   }
   void t_set_stimulus(const stimulus_type & stim) {
-    //    t_wait_not_busy();
+    t_wait_not_busy();
     unsorted_vld = true;
     unsorted_sop = stim.sop();
     unsorted_eop = stim.eop();
@@ -204,7 +204,7 @@ struct StimulusGenerator {
  private:
   std::size_t stim_i_{0}, expect_i_{0};
   std::vector<word_type> unsorted_, sorted_;
-  tb::Random::UniformRandomInterval<word_type> rnd{};
+  tb::Random::UniformRandomInterval<word_type> rnd{127, 0};
 };
 
 TOP top;
@@ -217,7 +217,7 @@ TEST(FSMQuicksortTest, Basic) {
   auto task = std::make_unique<
     tb::BasicPassValidNotBusyTask<TOP> >(top);
 
-  for (std::size_t i = 0; i < 1; i++) {
+  for (std::size_t i = 0; i < n; i++) {
     StimulusGenerator gen{16};
 
     Stimulus stim;

@@ -29,8 +29,6 @@
 
 namespace tb {
 
-std::random_device Random::rd_;
-
-std::size_t Random::seed_;
+std::mt19937 Random::mt_;
 
 } // namespace tb
