@@ -25,5 +25,11 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-emit_answer(
-  tb_vert_ucode_quicksort vert_ucode_quicksort.sv vert_ucode_quicksort.cpp)
+emit_solution(
+  TARGET
+  tb_vert_ucode_quicksort
+  VTOP
+  vert_ucode_quicksort.sv
+  TB
+  vert_ucode_quicksort.cpp
+  )

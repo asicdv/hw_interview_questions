@@ -25,8 +25,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-`include "libtb2.vh"
-`include "libv2_pkg.vh"
+`include "libv_pkg.vh"
 
 `include "fsm_quicksort_pkg.vh"
 
@@ -67,15 +66,6 @@ module fsm_quicksort (
    , output logic                            sorted_eop_r
    , output logic                            sorted_err_r
    , output logic [fsm_quicksort_pkg::W-1:0] sorted_dat_r
-
-   //======================================================================== //
-   //                                                                         //
-   // Control                                                                 //
-   //                                                                         //
-   //======================================================================== //
-
-   //
-   , output logic                            busy_r
 );
   import fsm_quicksort_pkg::*;
 
@@ -195,7 +185,8 @@ module fsm_quicksort (
       //
       queue_idle  = '0;
       for (int i = 0; i < BANK_N; i++)
-        queue_idle [i]  = (bank_state_r [i].status == BANK_IDLE);
+        queue_idle [i]  = (bank_state_r [i].status == BANK_IDLE) ||
+                          (bank_state_r [i].status == BANK_LOADING);
 
       //
       queue_ready  = '0;

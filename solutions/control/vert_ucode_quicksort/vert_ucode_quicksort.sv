@@ -25,8 +25,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-`include "libtb2.vh"
-`include "libv2_pkg.vh"
+`include "libv_pkg.vh"
 
 `include "vert_ucode_quicksort_pkg.vh"
 
@@ -67,15 +66,6 @@ module vert_ucode_quicksort (
    , output logic                                 sorted_eop_r
    , output logic                                 sorted_err_r
    , output logic [vert_ucode_quicksort_pkg::W-1:0] sorted_dat_r
-
-   //======================================================================== //
-   //                                                                         //
-   // Control                                                                 //
-   //                                                                         //
-   //======================================================================== //
-
-   //
-   , output logic                            busy_r
 );
   import vert_ucode_quicksort_pkg::*;
 

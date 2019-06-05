@@ -27,5 +27,5 @@
 
 add_subdirectory(vending_machine_fsm)
 add_subdirectory(vending_machine_dp)
-#add_subdirectory(fsm_quicksort)
-#add_subdirectory(vert_ucode_quicksort)
+add_subdirectory(fsm_quicksort)
+add_subdirectory(vert_ucode_quicksort)

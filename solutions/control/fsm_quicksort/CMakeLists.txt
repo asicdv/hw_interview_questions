@@ -25,4 +25,11 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-emit_answer(tb_fsm_quicksort fsm_quicksort.sv fsm_quicksort.cpp)
+emit_solution(
+  TARGET
+  tb_fsm_quicksort
+  VTOP
+  fsm_quicksort.sv
+  TB
+  fsm_quicksort.cpp
+  )
