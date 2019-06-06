@@ -25,127 +25,182 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-#include <libtb2.hpp>
-#include <deque>
+#include "libtb/libtb.hpp"
+#include "libtb/verilator.hpp"
+#include <gtest/gtest.h>
 #include "vobj/Vmcp_formulation.h"
 
+using word_type = uint32_t;
+
 #define PORTS(__func)                           \
-    __func(l_in_pass_r, bool)                   \
-    __func(l_in_r, uint32_t)                    \
-    __func(l_busy_r, bool)                      \
-    __func(c_out_pass_r, bool)                  \
-    __func(c_out_r, uint32_t)
+  __func(l_in_pass_r, bool)                     \
+  __func(l_in_r, word_type)                     \
+  __func(l_busy_r, bool)                        \
+  __func(c_out_pass_r, bool)                    \
+  __func(c_out_r, word_type)
 
-typedef Vmcp_formulation uut_t;
+struct Stimulus {
+  friend std::ostream & operator<<(std::ostream & os, const Stimulus & stim) {
+    return os << "'{dat=" << stim.dat() << "}";
+  }
+  Stimulus(word_type dat) : dat_(dat) {}
+  word_type dat() const { return dat_; }
+ private:
+  word_type dat_;
+};
 
-struct McpFormulationTb : libtb2::Top<McpFormulationTb> {
+struct Expect {
+  friend std::ostream & operator<<(std::ostream & os, const Expect & x) {
+    return os << "'{dat=" << x.dat() << "}";
+  }
+  friend bool operator==(const Expect & a, const Expect & b) {
+    return (a.dat() == b.dat());
+  }
+  Expect(word_type dat) : dat_(dat) {}
+  word_type dat() const { return dat_; }
+ private:
+  word_type dat_;
+};
 
-  SC_HAS_PROCESS(McpFormulationTb);
-  McpFormulationTb(sc_core::sc_module_name = "t")
-      : uut_("uut")
-#define __construct_signals(__name, __type)     \
-      , __name##_(#__name)
-      PORTS(__construct_signals)
-#undef __construct_signals
-  {
-    //
-    resetter_0_.clk(clk_0_);
-    resetter_0_.rst(rst_0_);
+struct TOP : tb::Top {
+  using stimulus_type = Stimulus;
+  using expected_type = Expect;
 
-    //
-    resetter_1_.clk(clk_1_);
-    resetter_1_.rst(rst_1_);
-    //
-    wd_.clk(clk_0_);
-    //
-    sampler_0_.clk(clk_0_);
-    sampler_1_.clk(clk_1_);
-    
-    SC_METHOD(m_checker);
-    sensitive << sampler_1_.sample();
-    dont_initialize();
-
-    uut_.l_clk(clk_0_);
-    uut_.l_rst(rst_0_);
-    uut_.c_clk(clk_1_);
-    uut_.c_rst(rst_1_);
+  TOP() {
+    v.l_rst(l_rst);
+    v.l_clk(l_clk);
+    v.c_rst(c_rst);
+    v.c_clk(c_clk);
 #define __bind_signals(__name, __type)          \
-    uut_.__name(__name##_);
+    v.__name(__name);
     PORTS(__bind_signals)
 #undef __bind_signals
-
-    SC_THREAD(t_stimulus);
+    start_tracing();
   }
- private:
-  void t_stimulus() {
-    b_idle();
-
-    resetter_0_.wait_reset_done();
-    resetter_1_.wait_reset_done();
-    
-    LOGGER(INFO) << "Starting stimulus...\n";
-
-    scv_smart_ptr<uint32_t> p;
-    while (true) {
-      p->next();
-
-      const uint32_t actual = *p;
-       b_issue(actual);
-    }
-    LOGGER(INFO) << "Stimulus ends.\n";
-
-    wait();
+  ~TOP() {
+    stop_tracing();
   }
-
-  void b_idle() {
-    l_in_pass_r_ = false;
-    l_in_r_ = 0;;
+  void t_apply_c_reset() {
+    c_rst = true;
+    t_await_c_cycles(2);
+    c_rst = false;
+    t_await_c_cycles(2);
   }
-
-  void b_issue(const uint32_t & w) {
-    while (l_busy_r_)
-      wait(sampler_0_.sample());
-
-    l_in_pass_r_ = true;
-    l_in_r_ = w;
-    wait_cycles();
-    LOGGER(INFO) << "Launching: " << w << "\n";
-    queue_.push_back(w);
-    b_idle();
+  void t_apply_l_reset() {
+    l_rst = true;
+    t_await_l_cycles(2);
+    l_rst = false;
+    t_await_l_cycles(2);
   }
-
-  void m_checker() {
-    if (c_out_pass_r_) {
-      LIBTB2_ERROR_ON(queue_.size() == 0);
-
-      const uint32_t expected = queue_.front();
-      queue_.pop_front();
-      const uint32_t actual = c_out_r_;
-      LIBTB2_ERROR_ON(actual != expected);
-      LOGGER(INFO) << "Capturing: " << actual << "\n";
-    }
+  void t_await_c_cycles(std::size_t n = 1) {
+    while (n--)
+      wait(c_clk.negedge_event());
   }
-
-  void wait_cycles(std::size_t cycles = 1) {
-    while (cycles--)
-      wait(clk_1_.posedge_event());
+  void t_await_l_cycles(std::size_t n = 1) {
+    while (n--)
+      wait(l_clk.negedge_event());
   }
-
-  std::deque<uint32_t> queue_;
-  libtb2::Resetter resetter_0_, resetter_1_;
-  libtb2::SimWatchDogCycles wd_;
-  libtb2::Sampler sampler_0_, sampler_1_;
-  sc_core::sc_clock clk_0_, clk_1_;
-  sc_core::sc_signal<bool> rst_0_, rst_1_;
-#define __declare_signals(__name, __type)       \
-  sc_core::sc_signal<__type> __name##_;
-  PORTS(__declare_signals)
-#undef __declare_signals
-  uut_t uut_;
+  Vmcp_formulation v{"mcp_formulation"};
+  ::sc_core::sc_clock c_clk{"c_clk"};
+  ::sc_core::sc_signal<bool> c_rst{"c_rst"};
+  ::sc_core::sc_clock l_clk{"l_clk"};
+  ::sc_core::sc_signal<bool> l_rst{"l_rst"};
+#define __declare_signal(__name, __type)        \
+  ::sc_core::sc_signal<__type> __name{#__name};
+  PORTS(__declare_signal)
+#undef __declare_signal
+  private:
+  void start_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    Verilated::traceEverOn(true);
+    vcd_ = std::make_unique<VerilatedVcdSc>();
+    v.trace(vcd_.get(), 99);
+    vcd_->open("sim.vcd");
+#endif
+  }
+  void stop_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    vcd_->close();
+#endif
+  }
+#ifdef OPT_ENABLE_TRACE
+  std::unique_ptr<VerilatedVcdSc> vcd_;
+#endif
 };
-SC_MODULE_EXPORT(McpFormulationTb);
 
-int sc_main(int argc, char **argv) {
-  McpFormulationTb tb;
-  return libtb2::Sim::start(argc, argv);
+namespace {
+
+TOP top;
+tb::TaskRunner TaskRunner;
+
+} // namespace
+
+TEST(McpFormulationTest, Basic) {
+  struct MCPFormulationTask : ::tb::Task {
+    MCPFormulationTask(TOP & top) : top_(top){
+      bgbool.add(false, 10);
+      bgbool.add(true, 10);
+      bgbool.finalize();
+    }
+    void add_stimulus(const Stimulus & s) {
+      stimulus_.push_back(s);
+      expect_.push_back(Expect{s.dat()});
+    }
+    void execute() override {
+      using namespace sc_core;
+
+      sc_process_handle h_stimulus = 
+          sc_spawn(std::bind(&MCPFormulationTask::t_stimulus, this), "t_stimulus");
+
+      sc_process_handle h_checker = 
+          sc_spawn(std::bind(&MCPFormulationTask::t_checker, this), "t_checker");
+    }
+   private:
+    void t_stimulus() {
+      top_.t_apply_l_reset();
+      top_.t_await_l_cycles();
+      for (std::size_t i = 0; i < stimulus_.size();) {
+        top_.l_in_pass_r = false;
+        if (bgbool() && !top_.l_busy_r) {
+          top_.l_in_pass_r = true;
+          top_.l_in_r = stimulus_[i].dat();
+          i++;
+        }
+        top_.t_await_l_cycles();
+      }
+      finish();
+    }
+    void t_checker() {
+      std::size_t i = 0;
+      top_.t_apply_c_reset();
+      top_.t_apply_c_reset();
+      while (i < expect_.size()) {
+        if (top_.c_out_pass_r) {
+          const Expect expect{expect_[i]};
+          const Expect actual{top_.c_out_r};
+
+          ASSERT_EQ(expect, actual) << sc_core::sc_time_stamp();
+          ++i;
+        }
+        top_.t_await_c_cycles();
+      }
+    }
+    std::vector<Stimulus> stimulus_;
+    std::vector<Expect> expect_;
+    tb::Random::Bag<bool> bgbool;
+    TOP & top_;
+  };
+  const std::size_t n{1024 << 3};
+  auto task = std::make_unique<MCPFormulationTask>(top);
+  tb::Random::UniformRandomInterval<word_type> rnd{};
+  for (std::size_t i = 0; i < n; i++)
+    task->add_stimulus(Stimulus{rnd()});
+  TaskRunner.set_task(std::move(task));
+  TaskRunner.run_until_exhausted(true);
+}
+
+int sc_main(int argc, char ** argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  ::tb::initialize(argc, argv);
+  return RUN_ALL_TESTS();
 }

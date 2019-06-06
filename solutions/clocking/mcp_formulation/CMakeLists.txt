@@ -25,4 +25,11 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-emit_answer(tb_mcp_formulation mcp_formulation.sv mcp_formulation.cpp)
+emit_solution(
+  TARGET
+  tb_mcp_formulation
+  VTOP
+  mcp_formulation.sv
+  TB
+  mcp_formulation.cpp
+  )

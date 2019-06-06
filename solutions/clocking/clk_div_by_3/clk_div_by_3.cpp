@@ -123,6 +123,9 @@ TEST(ClkDivBy3Test, Basic) {
       slow_n_ = 0;
       fast_n_ = 0;
 
+      // Run fast clock for 300 cycles. Once elapsed, the slow clock
+      // should be (approximately) 300 / 3 = 100.
+      //
       top_.t_await_cycles(300);
 
       ASSERT_EQ(fast_n_, 300);
