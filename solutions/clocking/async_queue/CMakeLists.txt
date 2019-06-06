@@ -25,6 +25,11 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-add_subdirectory(async_queue)
-#add_subdirectory(mcp_formulation)
-#add_subdirectory(clk_div_by_3)
+emit_solution(
+  TARGET
+  tb_async_queue
+  VTOP
+  async_queue.sv
+  TB
+  async_queue.cpp
+  )

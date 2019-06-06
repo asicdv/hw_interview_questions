@@ -27,7 +27,7 @@
 
 add_subdirectory(arithmetic)
 add_subdirectory(general)
-#add_subdirectory(clocking)
+add_subdirectory(clocking)
 add_subdirectory(control)
 #add_subdirectory(design)
 #add_subdirectory(memory)
