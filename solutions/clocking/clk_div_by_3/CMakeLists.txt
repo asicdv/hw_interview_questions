@@ -25,4 +25,11 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-emit_answer(tb_clk_div_by_3 clk_div_by_3.sv clk_div_by_3.cpp)
+emit_solution(
+  TARGET
+  tb_clk_div_by_3
+  VTOP
+  clk_div_by_3.sv
+  TB
+  clk_div_by_3.cpp
+  )

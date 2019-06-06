@@ -26,5 +26,6 @@
 ##========================================================================== //
 
 add_subdirectory(async_queue)
+add_subdirectory(clk_div_by_3)
 #add_subdirectory(mcp_formulation)
-#add_subdirectory(clk_div_by_3)
+
