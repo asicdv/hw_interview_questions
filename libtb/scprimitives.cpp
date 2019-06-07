@@ -25,24 +25,17 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-#ifndef __LIBTB_HPP__
-#define __LIBTB_HPP__
-
-#include "options.hpp"
-
-#define SC_INCLUDE_DYNAMIC_PROCESSES
-#include <systemc>
-#ifdef OPT_ENABLE_SCV
-#  pragma GCC diagnostic push
-#  pragma GCC diagnostic ignored  "-Wnull-dereference"
-#  include <scv.h>
-#  pragma GCC diagnostic pop
-#endif
-
-#include "tb.hpp"
-#include "task.hpp"
-#include "random.hpp"
-#include "utility.hpp"
 #include "scprimitives.hpp"
 
-#endif
+namespace tb {
+
+RandomBool::RandomBool(::sc_core::sc_module_name mn, float p)
+    : sc_module(mn), p_(p) {
+  SC_METHOD(m_stimulus);
+  sensitive << clk.pos();
+  dont_initialize();
+}
+
+void RandomBool::m_stimulus() { out = rnd() < (p_ * 1024); }
+
+} // namespace tb

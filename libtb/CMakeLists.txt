@@ -30,6 +30,7 @@ set(SRCS
   tb.cpp
   task.cpp
   random.cpp
+  scprimitives.cpp
   )
 add_library(tb SHARED ${SRCS})
 target_link_libraries(tb ${SystemC_LIB} gtest_main gtest pthread)

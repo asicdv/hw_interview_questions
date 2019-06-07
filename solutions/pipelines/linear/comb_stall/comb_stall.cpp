@@ -25,11 +25,12 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-#include <libtb2.hpp>
-#include <vector>
-#include <iostream>
-
+#include "libtb/libtb.hpp"
+#include "libtb/verilator.hpp"
+#include <gtest/gtest.h>
 #include "vobj/Vcomb_stall.h"
+
+using word_type = uint32_t;
 
 #define PORTS(__func)                           \
   __func(in, uint32_t)                          \
@@ -39,120 +40,126 @@
   __func(out_vld_r, bool)                       \
   __func(stall_req, uint32_t)
 
-typedef Vcomb_stall uut_t;
+struct Stimulus {
+  friend std::ostream & operator<<(std::ostream & os, const Stimulus & stim) {
+    return os << "'{a=" << stim.a() << "}";
+  }
+  Stimulus(word_type a) : a_(a) {}
+  word_type a() const { return a_; }
+ private:
+  word_type a_;
+};
 
-struct CombStallTb : libtb2::Top<uut_t> {
-  SC_HAS_PROCESS(CombStallTb);
-  CombStallTb(sc_core::sc_module_name mn = "t")
-    : uut_("uut")
-#define __construct_ports(__name, __type)       \
-      , __name ## _(#__name)
-    PORTS(__construct_ports)
-#undef __construct_ports
-    , clk_("clk")
-    , rst_("rst")
-  {
-    uut_.clk(clk_);
-    uut_.rst(rst_);
+struct Expect {
+  friend std::ostream & operator<<(std::ostream & os, const Expect & res) {
+    return os << "'{e=" << res.y() << "}";
+  }
+  friend bool operator==(const Expect & a, const Expect & b) {
+    return (a.y() == b.y());
+  }
+  Expect(word_type y) : y_(y) {}
+  word_type y() const { return y_; }
+ private:
+  word_type y_;
+};
+
+struct TOP : tb::Top {
+  using stimulus_type = Stimulus;
+  using expected_type = Expect;
+
+   TOP() {
+     v.rst(rst);
+     v.clk(clk);
 #define __bind_signals(__name, __type)          \
-    uut_.__name(__name ## _);
-    PORTS(__bind_signals)
+     v.__name(__name);
+     PORTS(__bind_signals)
 #undef __bind_signals
-
-    resetter_.clk(clk_);
-    resetter_.rst(rst_);
-    
-    sampler_.clk(clk_);
-
-    generate_stimulus(1024);
-
-    SC_THREAD(t_in);
-    
-    SC_METHOD(m_out);
-    sensitive << sampler_.sample();
-    dont_initialize();
-
-    stall_n_ = 0;
-    SC_METHOD(m_stall);
-    sensitive << clk_.posedge_event();
-
-    register_uut(uut_);
-    vcd_on();
+     bc.clk(clk);
+     bc.out(stall_req);
+     for (std::size_t b = 0; b < 10; b++)
+       bc.set_p(b, 0.05f);
+     start_tracing();
+   }
+   ~TOP() {
+     stop_tracing();
+   }
+  void set_idle() {
+    in_vld = false;
+    in = word_type{};
   }
-private:
-  void m_stall() {
-    if ((++stall_n_ % 10) == 0) {
-      stall_req_ = (1 << (*stall_ptr_ % 10));
-
-      stall_ptr_->next();
-    } else {
-      stall_req_ = 0;
-    }
+  void t_set_stimulus(const stimulus_type & stim) {
+    in_vld = true;
+    in = stim.a();
+    t_await_advance();
+    set_idle();
   }
-  void generate_stimulus(std::size_t n = 10) {
-    scv_smart_ptr<uint32_t> rnd;
-    stimulus_.clear();
-    i_ = 0;
-    j_ = 0;
-    while (n-- != 0) {
-      rnd->next();
-      stimulus_.push_back(*rnd);
-    }
+  bool out_is_valid() const { return out_vld_r; }
+  Expect get_expect() const { return Expect{out_r}; }
+  void t_apply_reset() {
+    rst = true;
+    t_await_cycles(2);
+    rst = false;
+    t_await_cycles(2);
   }
-  void t_in() {
-    in_vld_ = false;
-    in_ = 0;
-    
-    resetter_.wait_reset_done();
-
-    wait(10, SC_NS);
-
-    while (i_ < stimulus_.size()) {
-      wait(clk_.posedge_event());
-
-      in_vld_ = true;
-      in_ = stimulus_[i_];
-      wait(sampler_.sample());
-      if (in_accept_)
-        i_++;
-    }
-    in_vld_ = false;
-
-    wait(100, SC_NS);
-    sc_core::sc_stop();
+  void t_await_advance() {
+    do { t_await_cycles(); } while (!in_accept);
   }
-  void m_out() {
-    if (out_vld_r_) {
-      const uint32_t actual = out_r_;
-      const uint32_t expected = stimulus_[j_++];
-
-      std::cout << "[" << sc_core::sc_time_stamp() << "] ";
-      if (actual != expected)
-        std::cout << "*** Mismatch expected = " << expected
-                  << " actual = " << actual;
-      else
-        std::cout << "Match!";
-
-      std::cout << "\n";
-    }
+  void t_await_cycles(std::size_t n = 1) {
+    while (n--)
+      wait(clk.negedge_event());
   }
-  libtb2::Resetter resetter_;
-  libtb2::Sampler sampler_;
-  std::vector<uint32_t> stimulus_;
-  std::size_t i_, j_;
-  sc_core::sc_clock clk_;
-  sc_core::sc_signal<bool> rst_;
+  Vcomb_stall v{"comb_stall"};
+  ::tb::MultiRandomBool<word_type, 10> bc{"multi_random_bool"};
+  ::sc_core::sc_signal<bool> rst{"rst"};
+  ::sc_core::sc_clock clk{"clk"};
 #define __declare_signal(__name, __type)        \
-  sc_core::sc_signal<__type> __name##_;
+  ::sc_core::sc_signal<__type> __name{#__name};
   PORTS(__declare_signal)
 #undef __declare_signal
-  std::size_t stall_n_;
-  scv_smart_ptr<uint32_t> stall_ptr_;
-  uut_t uut_;
+ private:
+  void start_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    Verilated::traceEverOn(true);
+    vcd_ = std::make_unique<VerilatedVcdSc>();
+    v.trace(vcd_.get(), 99);
+    vcd_->open("sim.vcd");
+#endif
+  }
+  void stop_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    vcd_->close();
+#endif
+  }
+#ifdef OPT_ENABLE_TRACE
+  std::unique_ptr<VerilatedVcdSc> vcd_;
+#endif
 };
-SC_MODULE_EXPORT(CombStallTb);
 
-int sc_main(int argc, char **argv) {
-  CombStallTb tb("tb");
-  return libtb2::Sim::start(argc, argv);
+namespace {
+
+TOP top;
+tb::TaskRunner TaskRunner;
+
+} // namespace
+
+TEST(CombStallTest, Basic) {
+  const std::size_t n{1024 << 5};
+  auto task = std::make_unique<
+    tb::BasicPassValidNotBusyTask<TOP> >(top);
+
+  tb::Random::UniformRandomInterval<uint32_t> rnd{};
+  for (std::size_t i = 0; i < n; i++) {
+    const Stimulus stim{rnd()};
+    task->add_stimulus(stim);
+    task->add_expected(Expect{stim.a()});
+  }
+  TaskRunner.set_task(std::move(task));
+  TaskRunner.run_until_exhausted(true);
 }
+
+int sc_main(int argc, char ** argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  ::tb::initialize(argc, argv);
+  return RUN_ALL_TESTS();
+}
+

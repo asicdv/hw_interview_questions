@@ -25,24 +25,68 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-#ifndef __LIBTB_HPP__
-#define __LIBTB_HPP__
+#ifndef __SCPRIMITIVES_HPP__
+#define __SCPRIMITIVES_HPP__
 
-#include "options.hpp"
-
-#define SC_INCLUDE_DYNAMIC_PROCESSES
 #include <systemc>
-#ifdef OPT_ENABLE_SCV
-#  pragma GCC diagnostic push
-#  pragma GCC diagnostic ignored  "-Wnull-dereference"
-#  include <scv.h>
-#  pragma GCC diagnostic pop
-#endif
-
-#include "tb.hpp"
-#include "task.hpp"
+#include <vector>
+#include <memory>
+#include <string>
 #include "random.hpp"
-#include "utility.hpp"
-#include "scprimitives.hpp"
+
+namespace tb {
+
+class RandomBool : ::sc_core::sc_module {
+ public:
+  ::sc_core::sc_in<bool> clk{"clk"};
+  ::sc_core::sc_out<bool> out{"out"};
+
+  SC_HAS_PROCESS(RandomBool);
+  RandomBool(::sc_core::sc_module_name mn = "RandomBool", float p = 0.5f);
+
+  void set_p(float p) { p_ = p; }
+ private:
+  void m_stimulus();
+  Random::UniformRandomInterval<uint32_t> rnd{1023, 0};
+  float p_;
+};
+
+template<typename OUT, std::size_t NUM>
+class MultiRandomBool : ::sc_core::sc_module {
+ public:
+  ::sc_core::sc_in<bool> clk{"clk"};
+  ::sc_core::sc_out<OUT> out{"out"};
+
+  SC_HAS_PROCESS(MultiRandomBool);
+  MultiRandomBool(::sc_core::sc_module_name mn = "MultiRandomBool") : sc_module(mn) {
+    const std::string prefix{"RandomBool"};
+    b_.resize(NUM);
+    for (std::size_t i = 0; i < NUM; i++) {
+      const std::string s{prefix + std::to_string(i)};
+      b_[i] = std::make_unique<RandomBool>(s.c_str());
+      b_[i]->clk(clk);
+      b_[i]->out(b_out_[i]);
+    }
+      
+    SC_METHOD(m_set_out);
+    for (std::size_t i = 0; i < NUM; i++)
+      sensitive << b_out_[i].value_changed_event();
+  }
+
+  void set_p(std::size_t b, float p) { b_[b]->set_p(p); }
+ private:
+  void m_set_out() {
+    OUT p{};
+    for (std::size_t i = 0; i < NUM; i++) {
+      if (b_[i]->out)
+        set_bit(p, i);
+    }
+    out = p;
+  }
+  ::sc_core::sc_signal<bool> b_out_[NUM];
+  std::vector<std::unique_ptr<RandomBool>> b_;
+};
+
+} // namespace tb
 
 #endif

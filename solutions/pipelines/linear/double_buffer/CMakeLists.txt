@@ -25,5 +25,11 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-emit_answer(
-  tb_double_buffer double_buffer.sv double_buffer.cpp)
+emit_solution(
+  TARGET
+  tb_double_buffer
+  VTOP
+  double_buffer.sv
+  TB
+  double_buffer.cpp
+  )

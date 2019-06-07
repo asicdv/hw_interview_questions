@@ -25,8 +25,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-`include "libtb2.vh"
-`include "libv2_pkg.vh"
+`include "libv_pkg.vh"
 
 module delay_pipe_mov #(parameter int N = 5, parameter int W = 32) (
 

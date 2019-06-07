@@ -25,8 +25,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-`include "libtb2.vh"
-`include "libv2_pkg.vh"
+`include "libv_pkg.vh"
 
 module double_buffer #(parameter int N = 10, parameter int W = 32) (
 
@@ -69,12 +68,14 @@ module double_buffer #(parameter int N = 10, parameter int W = 32) (
 );
 
   //
-  logic [N-1:0]                         A__in_vld;
+  logic [N-1:0]                         A__in_vld_r;
   logic [N-1:0][W-1:0]                  A__in_w;
+  logic [N-1:0]                         A__in_accept_r;
 
   //
   logic [N-1:0]                         B__out_vld_r;
   logic [N-1:0][W-1:0]                  B__out_r;
+  logic [N-1:0]                         B__out_accept_r;
 
   //
   logic [N-1:0]                         B__stall;
@@ -92,26 +93,27 @@ module double_buffer #(parameter int N = 10, parameter int W = 32) (
     begin : pipe_PROC
 
       //
-      A__in_vld [0]  = in_vld;
-      A__in_w [0]    = in;
+      A__in_vld_r [0]          = in_vld;
+      A__in_w [0]              = in;
 
       //
-      in_accept      = (~A__stall_r [0]);
+      in_accept                = (~A__stall_r [0]);
+      B__out_accept_r [N - 1]  = 'b1;
 
       for (int i = 1; i < N; i++) begin
 
         //
-        A__in_vld [i]  = (~stall_req [i - 1]) & B__out_vld_r [i - 1];
-        A__in_w [i]    = B__out_r [i - 1];
+        A__in_vld_r [i]          = B__out_vld_r [i - 1];
+        A__in_w [i]              = B__out_r [i - 1];
 
         //
-        B__stall [i - 1]   = (stall_req [i - 1] | A__stall_r [i]);
+        B__out_accept_r [i - 1]  = A__in_accept_r [i];
 
-      end // for (int i = 0; i < N; i++)
+      end // for (int i        = 0; i < N; i++)
 
       //
-      out_vld_r        = B__out_vld_r [N - 1];
-      out_r            = B__out_r [N - 1];
+      out_vld_r                  = B__out_vld_r [N - 1];
+      out_r                      = B__out_r [N - 1];
 
     end // block: pipe_PROC
   
@@ -130,16 +132,17 @@ module double_buffer #(parameter int N = 10, parameter int W = 32) (
         .clk             (clk                )
       , .rst             (rst                )
       //
-      , .A__in_vld       (A__in_vld [g]      )
+      , .A__in_vld_r     (A__in_vld_r [g]    )
       , .A__in_w         (A__in_w [g]        )
+      , .A__in_accept_r  (A__in_accept_r [g] )
       //
+      , .B__out_accept_r (B__out_accept_r [g])
       , .B__out_vld_r    (B__out_vld_r [g]   )
       , .B__out_r        (B__out_r [g]       )
       //
-      , .B__stall        (B__stall [g]       )
-      , .A__stall_r      (A__stall_r [g]     )
+      , .stall_req       (stall_req [g]      )
     );
-    
+
   end endgenerate
 
 endmodule // comb_stall

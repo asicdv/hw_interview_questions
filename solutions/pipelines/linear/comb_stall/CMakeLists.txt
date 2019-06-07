@@ -25,5 +25,11 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-emit_answer(
-  tb_comb_stall comb_stall.sv comb_stall.cpp)
+emit_solution(
+  TARGET
+  tb_comb_stall
+  VTOP
+  comb_stall.sv
+  TB
+  comb_stall.cpp
+  )

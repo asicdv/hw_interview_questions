@@ -25,8 +25,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-`include "libtb2.vh"
-`include "libv2_pkg.vh"
+`include "libv_pkg.vh"
 
 module comb_stall #(parameter int N = 10, parameter int W = 32) (
 

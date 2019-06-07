@@ -25,5 +25,11 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-emit_answer(
-  tb_delay_pipe_static delay_pipe_static.sv delay_pipe_static.cpp)
+emit_solution(
+  TARGET
+  tb_delay_pipe_static
+  VTOP
+  delay_pipe_static.sv
+  TB
+  delay_pipe_static.cpp
+  )
