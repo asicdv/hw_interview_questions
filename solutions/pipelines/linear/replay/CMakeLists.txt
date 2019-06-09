@@ -25,5 +25,11 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-emit_answer(
-  tb_replay replay.sv replay.cpp)
+emit_solution(
+  TARGET
+  tb_replay
+  VTOP
+  replay.sv
+  TB
+  replay.cpp
+  )

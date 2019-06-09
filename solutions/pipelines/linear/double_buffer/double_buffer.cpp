@@ -162,4 +162,3 @@ int sc_main(int argc, char ** argv) {
   ::tb::initialize(argc, argv);
   return RUN_ALL_TESTS();
 }
-
