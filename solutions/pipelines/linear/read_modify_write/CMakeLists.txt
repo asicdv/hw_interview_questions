@@ -25,5 +25,11 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-emit_answer(
-  tb_read_modify_write read_modify_write.sv read_modify_write.cpp)
+emit_solution(
+  TARGET
+  tb_read_modify_write
+  VTOP
+  read_modify_write.sv
+  TB
+  read_modify_write.cpp
+  )
