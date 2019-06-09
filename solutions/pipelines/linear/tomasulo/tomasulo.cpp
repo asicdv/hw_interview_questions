@@ -25,285 +25,246 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-#include <libtb2.hpp>
-#include <vector>
-#include <iostream>
-#include <sstream>
-
+#include "libtb/libtb.hpp"
+#include "libtb/verilator.hpp"
+#include <gtest/gtest.h>
 #include "vobj/Vtomasulo.h"
+
+using word_type = uint32_t;
 
 #define PORTS(__func)                           \
   __func(in_pass, bool)                         \
-  __func(in_inst_ra_1, uint32_t)                \
-  __func(in_inst_ra_0, uint32_t)                \
-  __func(in_inst_wa, uint32_t)                  \
-  __func(in_inst_op, uint32_t)                  \
-  __func(in_imm, uint32_t)                      \
+  __func(in_inst_ra_0, word_type)               \
+  __func(in_inst_ra_1, word_type)               \
+  __func(in_inst_wa, word_type)                 \
+  __func(in_inst_op, word_type)                 \
+  __func(in_imm, word_type)                     \
   __func(in_accept, bool)                       \
   __func(out_vld_r, bool)                       \
-  __func(out_wa_r, uint32_t)                    \
-  __func(out_wdata_r, uint32_t)
+  __func(out_wa_r, word_type)                   \
+  __func(out_wdata_r, word_type)
 
-typedef Vtomasulo uut_t;
-
-enum OP {
-  OP_NOP = 0,
-  OP_AND = 1,
-  OP_NOT = 2,
-  OP_OR = 3,
-  OP_XOR = 4,
-  OP_ADD = 5,
-  OP_SUB = 6,
-  OP_MOV0 = 7,
-  OP_MOV1 = 8,
-  OP_MOVI = 9,
-  OP_MPY = 10
-};
-
-template<>
-struct scv_extensions<OP> : public scv_enum_base<OP> {
-  SCV_ENUM_CTOR(OP) {
-    SCV_ENUM(OP_AND);
-    SCV_ENUM(OP_NOT);
-    SCV_ENUM(OP_OR);
-    SCV_ENUM(OP_XOR);
-    SCV_ENUM(OP_ADD);
-    SCV_ENUM(OP_SUB);
-    SCV_ENUM(OP_MOV0);
-    SCV_ENUM(OP_MOV1);
-    SCV_ENUM(OP_MOVI);
-    SCV_ENUM(OP_MPY);
+struct Stimulus {
+  friend std::ostream & operator<<(std::ostream & os, const Stimulus & stim) {
+    return os << "'{"
+              << "ra_0=" << stim.ra_0() << ","
+              << "ra_1=" << stim.ra_1() << ","
+              << "wa=" << stim.wa() << ","
+              << "op=" << stim.op() << ","
+              << "imm=" << stim.imm()
+              << "}"
+        ;
   }
+  Stimulus(word_type ra_0, word_type ra_1, word_type wa, word_type op, word_type imm)
+      : ra_0_(ra_0), ra_1_(ra_1), wa_(wa), op_(op), imm_(imm) {}
+  word_type ra_0() const { return ra_0_; }
+  word_type ra_1() const { return ra_1_; }
+  word_type wa() const { return wa_; }
+  word_type op() const { return op_; }
+  word_type imm() const { return imm_; }
+ private:
+  word_type ra_0_, ra_1_, wa_, op_, imm_;
 };
 
-struct Inst {
-  uint32_t op;
-  uint32_t ra [2];
-  uint32_t wa;
-  uint32_t imm;
-  std::string to_string() const {
-    std::stringstream ss;
-    ss << op
-       << ra [1]
-       << ra [0]
-       << wa
-       << imm
-      ;
-    return ss.str();
+struct Expect {
+  friend std::ostream & operator<<(std::ostream & os, const Expect & res) {
+    return os << "'{wa=" << res.wa() << ",wdata=" << res.wdata() << "}";
   }
-};
+  friend bool operator==(const Expect & a, const Expect & b) {
+    if (a.wa() != b.wa())
+      return false;
+    if (a.wdata() != b.wdata())
+      return false;
 
-
-
-struct Result {
-  uint32_t wa;
-  uint32_t d;
-  std::string to_string() const {
-    std::stringstream ss;
-    ss << wa
-       << d
-      ;
-    return ss.str();
+    return true;
   }
+  Expect(word_type wa, word_type wdata) : wa_(wa), wdata_(wdata) {}
+  word_type wa() const { return wa_; }
+  word_type wdata() const { return wdata_; }
+ private:
+  word_type wa_, wdata_;
 };
 
-struct Machine {
-  Result apply(const Inst & i) {
-    Result r;
-    r.wa = i.wa;
-    switch (i.op) {
-    case OP_AND: {
-      r.d = (reg[i.ra[0]] & reg[i.ra[1]]);
-    } break;
-    case OP_NOT: {
-      r.d = ~reg[i.ra[0]];
-    } break;
-    case OP_OR: {
-      r.d = (reg[i.ra[0]] | reg[i.ra[1]]);
-    } break;
-    case OP_XOR: {
-      r.d = (reg[i.ra[0]] ^ reg[i.ra[1]]);
-    } break;
-    case OP_ADD: {
-      r.d = (reg[i.ra[0]] + reg[i.ra[1]]);
-    } break;
-    case OP_SUB: {
-      r.d = (reg[i.ra[0]] - reg[i.ra[1]]);
-    } break;
-    case OP_MOV0: {
-      r.d = reg[i.ra[0]];
-    } break;
-    case OP_MOV1: {
-      r.d = reg[i.ra[1]];
-    } break;
-    case OP_MOVI: {
-      r.d = i.imm;
-    } break;
-    case OP_MPY: {
-      r.d = reg[i.ra[0]] * reg[i.ra[1]];
-    } break;
+struct TOP : tb::Top {
+  using stimulus_type = Stimulus;
+  using expected_type = Expect;
+
+   TOP() {
+     v.rst(rst);
+     v.clk(clk);
+#define __bind_signals(__name, __type)          \
+     v.__name(__name);
+     PORTS(__bind_signals)
+#undef __bind_signals
+     start_tracing();
+   }
+   ~TOP() {
+     stop_tracing();
+   }
+  void set_idle() {
+    in_pass = false;
+    in_inst_ra_0 = word_type{};
+    in_inst_ra_1 = word_type{};
+    in_inst_wa = word_type{};
+    in_inst_op = word_type{};
+    in_imm = word_type{};
+  }
+  void t_set_stimulus(const stimulus_type & stim) {
+    in_pass = true;
+    in_inst_ra_0 = stim.ra_0();
+    in_inst_ra_1 = stim.ra_1();
+    in_inst_wa = stim.wa();
+    in_inst_op = stim.op();
+    in_imm = stim.imm();
+    t_await_advance();
+    set_idle();
+  }
+  bool out_is_valid() const { return out_vld_r; }
+  Expect get_expect() const { return Expect{out_wa_r, out_wdata_r}; }
+  void t_apply_reset() {
+    rst = true;
+    t_await_cycles(2);
+    rst = false;
+    t_await_cycles(2);
+  }
+  void t_await_advance() {
+    do { t_await_cycles(); } while (!in_accept);
+  }
+  void t_await_cycles(std::size_t n = 1) {
+    while (n--)
+      wait(clk.negedge_event());
+  }
+  Vtomasulo v{"tomasulo"};
+  ::sc_core::sc_signal<bool> rst{"rst"};
+  ::sc_core::sc_clock clk{"clk"};
+#define __declare_signal(__name, __type)        \
+  ::sc_core::sc_signal<__type> __name{#__name};
+  PORTS(__declare_signal)
+#undef __declare_signal
+ private:
+  void start_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    Verilated::traceEverOn(true);
+    vcd_ = std::make_unique<VerilatedVcdSc>();
+    v.trace(vcd_.get(), 99);
+    vcd_->open("sim.vcd");
+#endif
+  }
+  void stop_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    vcd_->close();
+#endif
+  }
+#ifdef OPT_ENABLE_TRACE
+  std::unique_ptr<VerilatedVcdSc> vcd_;
+#endif
+};
+
+namespace {
+
+TOP top;
+tb::TaskRunner TaskRunner;
+
+enum OP : word_type {
+  NOP = 0,
+  AND = 1,
+  NOT = 2,
+  OR = 3,
+  XOR = 4,
+  ADD = 5,
+  SUB = 6,
+  MOV0 = 7,
+  MOV1 = 8,
+  MOVI = 9
+};
+
+struct MachineModel {
+  Expect apply(const Stimulus & i) {
+    word_type wdata;
+    switch (i.op()) {
+      case OP::AND: {
+        wdata = (reg[i.ra_0()] & reg[i.ra_1()]);
+      } break;
+      case OP::NOT: {
+        wdata = ~reg[i.ra_0()];
+      } break;
+      case OP::OR: {
+        wdata = (reg[i.ra_0()] | reg[i.ra_1()]);
+      } break;
+      case OP::XOR: {
+        wdata = (reg[i.ra_0()] ^ reg[i.ra_1()]);
+      } break;
+      case OP::ADD: {
+        wdata = (reg[i.ra_0()] + reg[i.ra_1()]);
+      } break;
+      case OP::SUB: {
+        wdata = (reg[i.ra_0()] - reg[i.ra_1()]);
+      } break;
+      case OP::MOV0: {
+        wdata = reg[i.ra_0()];
+      } break;
+      case OP::MOV1: {
+        wdata = reg[i.ra_1()];
+      } break;
+      case OP::MOVI: {
+        wdata = i.imm();
+      } break;
     }
 
-    reg[r.wa] = r.d;
-    return r;
+    reg[i.wa()] = wdata;
+    return Expect{i.wa(), wdata};
   }
   uint32_t reg[32];
 };
 
-struct TomasuloTb : libtb2::Top<uut_t> {
-  SC_HAS_PROCESS(TomasuloTb);
-  TomasuloTb(sc_core::sc_module_name mn = "t")
-    : uut_("uut")
-#define __construct_ports(__name, __type)       \
-      , __name ## _(#__name)
-    PORTS(__construct_ports)
-#undef __construct_ports
-    , clk_("clk")
-    , rst_("rst")
-  {
-    uut_.clk(clk_);
-    uut_.rst(rst_);
-#define __bind_signals(__name, __type)          \
-    uut_.__name(__name ## _);
-    PORTS(__bind_signals)
-#undef __bind_signals
+} // namespace
 
-    resetter_.clk(clk_);
-    resetter_.rst(rst_);
+TEST(DoubleBufferTest, Basic) {
+  const std::size_t n{1024 << 5};
+  auto task = std::make_unique<
+    tb::BasicPassValidNotBusyTask<TOP> >(top);
+
+  MachineModel mdl{};
+  tb::Random::UniformRandomInterval<uint32_t> rnd{};
+
+  // Initialize machine state.
+  for (word_type i = 0; i < 32; i++) {
+    const Stimulus stim{0, 0, i, OP::MOVI, rnd()};
+    const Expect expect{mdl.apply(stim)};
     
-    sampler_.clk(clk_);
+    task->add_stimulus(stim);
+    task->add_expected(expect);
+  }
 
-    generate_stimulus(1024 << 2);
+  // Initialize machine state.
+  tb::Random::UniformRandomInterval<uint32_t> rnd_reg{31, 0};
 
-    SC_THREAD(t_in);
+  tb::Random::Bag<OP> opbg;
+  opbg.add(OP::NOP);
+  opbg.add(OP::AND);
+  opbg.add(OP::NOT);
+  opbg.add(OP::OR);
+  opbg.add(OP::XOR);
+  opbg.add(OP::ADD);
+  opbg.add(OP::SUB);
+  opbg.add(OP::MOV0);
+  opbg.add(OP::MOV1);
+  opbg.add(OP::MOVI);
+  opbg.finalize();
+
+  for (word_type i = 0; i < n; i++) {
+    const Stimulus stim{rnd_reg(), rnd_reg(), rnd_reg(), opbg(), rnd()};
+    const Expect expect{mdl.apply(stim)};
     
-    SC_METHOD(m_out);
-    sensitive << sampler_.sample();
-    dont_initialize();
-
-    register_uut(uut_);
-    vcd_on();
-
-    i_ = 0;
-    error_ = false;
+    task->add_stimulus(stim);
+    task->add_expected(expect);
   }
-private:
-  void generate_stimulus(std::size_t n = 10) {
+  TaskRunner.set_task(std::move(task));
+  TaskRunner.run_until_exhausted(true);
+}
 
-    stimulus_.clear();
-
-    // Initialize machine
-    scv_smart_ptr<uint32_t> imm_ptr;
-    for (uint32_t i = 0; i < 32; i++, imm_ptr->next()) {
-      Inst inst;
-      inst.op = OP_MOVI;
-      inst.wa = i;
-      inst.imm = *imm_ptr;
-
-      expected_.push_back(m_.apply(inst));
-      stimulus_.push_back(inst);
-    }
-    
-    struct reg_constraint : scv_constraint_base {
-      scv_smart_ptr<uint32_t> p;
-      SCV_CONSTRAINT_CTOR(reg_constraint) {
-        SCV_CONSTRAINT((p() >= 0) && (p() < 32)); 
-      }
-    } reg_c("reg_constraint_c");
-    
-    scv_smart_ptr<OP> op;
-    scv_smart_ptr<uint32_t> imm;
-
-    while (n-- != 0) {
-      op->next();
-      imm->next();
-
-      Inst inst;
-      inst.op =  *op; 
-      inst.imm =  *imm; 
-      inst.ra [0] = *reg_c.p; reg_c.next();
-      inst.ra [1] = *reg_c.p; reg_c.next();
-      inst.wa = *reg_c.p; reg_c.next();
-
-      expected_.push_back(m_.apply(inst));
-      stimulus_.push_back(inst);
-    }    
-  }
-  void t_in() {
-    in_pass_ = false;
-    resetter_.wait_reset_done();
-
-    wait(100, SC_NS);
-
-    for (std::size_t i = 0; i < stimulus_.size(); i++) {
-
-      do { sampler_.wait_for_sample(); } while (!in_accept_);
-
-      const Inst & inst = stimulus_[i];
-
-      in_pass_ = true;
-      in_inst_ra_1_ = inst.ra[1];
-      in_inst_ra_0_ = inst.ra[0];
-      in_inst_wa_ = inst.wa;
-      in_inst_op_ = inst.op;
-      in_imm_ = inst.imm;
-
-      wait(clk_.posedge_event());
-
-      if (error_)
-        break;
-    }
-    in_pass_ = false;
-
-    wait(10, SC_NS);
-    sc_core::sc_stop();
-  }
-  void m_out() {
-    if (out_vld_r_) {
-
-      const uint32_t out_wa = out_wa_r_;
-      const uint32_t out_wdata = out_wdata_r_;
-
-      const Result & r = expected_[i_++];
-      if (out_wa != r.wa) {
-        error_ = true;
-
-        std::cout << sc_core::sc_time_stamp()
-                  << "**** ERROR:"
-                  << " expected WA = " << r.wa
-                  << " actual WA = " << out_wa
-                  << "\n";
-      }
-
-      if (out_wdata != r.d) {
-        error_ = true;
-        
-        std::cout << sc_core::sc_time_stamp()
-                  << "**** ERROR:"
-                  << " expected WDATA = " << r.d
-                  << " actual WDATA = " << out_wdata
-                  << "\n";
-      } 
-    }
-  }
-  libtb2::Resetter resetter_;
-  libtb2::Sampler sampler_;
-  Machine m_;
-  std::vector<Inst> stimulus_;
-  std::vector<Result> expected_;
-  std::size_t i_;
-  bool error_;
-  sc_core::sc_clock clk_;
-  sc_core::sc_signal<bool> rst_;
-#define __declare_signal(__name, __type)        \
-  sc_core::sc_signal<__type> __name##_;
-  PORTS(__declare_signal)
-#undef __declare_signal
-  uut_t uut_;
-};
-SC_MODULE_EXPORT(TomasuloTb);
-
-int sc_main(int argc, char **argv) {
-  TomasuloTb tb("tb");
-  return libtb2::Sim::start(argc, argv);
+int sc_main(int argc, char ** argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  ::tb::initialize(argc, argv);
+  return RUN_ALL_TESTS();
 }

@@ -25,9 +25,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-`include "libtb2.vh"
-`include "libv2_pkg.vh"
-
+`include "libv_pkg.vh"
 `include "tomasulo_pkg.vh"
 
 module tomasulo (

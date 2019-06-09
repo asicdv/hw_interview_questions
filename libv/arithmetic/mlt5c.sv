@@ -28,7 +28,7 @@
 // OF THE POSSIBILITY OF SUCH DAMAGE.
 // ==================================================================== //
 
-`include "libv2_pkg.vh"
+`include "libv_pkg.vh"
 
 module mlt5c #(parameter int W = 32) (
 

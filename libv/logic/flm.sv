@@ -28,8 +28,6 @@
 // OF THE POSSIBILITY OF SUCH DAMAGE.
 // ==================================================================== //
 
-`include "libtb2.vh"
-
 module flm #(parameter int N = 16) (
 
    //======================================================================== //
@@ -69,10 +67,6 @@ module flm #(parameter int N = 16) (
    , output logic [N-1:0]                    state_w
    , output logic [N-1:0]                    state_r
 );
-  // Validate parameterizations
-  //
-  `libtb2_static_assert(N > 0);
-
   //
   typedef logic [N-1:0]                 n_t;
   typedef logic [$clog2(N)-1:0]         id_t;

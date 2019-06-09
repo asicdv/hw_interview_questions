@@ -28,8 +28,6 @@
 // OF THE POSSIBILITY OF SUCH DAMAGE.
 // ==================================================================== //
 
-`include "libtb2.vh"
-
 module rr #(parameter int W = 32) (
 
    //======================================================================== //
@@ -54,14 +52,6 @@ module rr #(parameter int W = 32) (
 );
 
   typedef logic [W-1:0]                 w_t;
-
-  // Validate parameterizations
-  `libtb2_static_assert(W > 1)
-
-  // Validate input/output contract
-  `libtb2_assert(!((gnt != 'b0) && (req == 'b0)))
-  `libtb2_assert(!((gnt == 'b0) && (req != 'b0)))
-  `libtb2_assert($onehot0(gnt));
   
   w_t                      idx_r;
   w_t                      idx_w;

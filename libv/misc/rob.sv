@@ -28,8 +28,6 @@
 // OF THE POSSIBILITY OF SUCH DAMAGE.
 // ==================================================================== //
 
-`include "libtb2.vh"
-
 module rob #(parameter int CMPL_W = 32,
              parameter int ALLOC_W = 32,
              parameter int N = 16) (
@@ -91,15 +89,6 @@ module rob #(parameter int CMPL_W = 32,
    , output logic                            idle_r
    , output logic                            full_r
 );
-  `include "libtb2_bdy.vh"
-
-  //
-  `libtb2_static_assert(N > 0);
-
-  // Export parameterizations to TB
-  //
-  `libtb2_export_int(ID_N, N);
-
   //
   typedef logic [$clog2(N)-1:0]  id_t;
   typedef logic [N - 1:0]        id_d_t;
@@ -149,18 +138,6 @@ module rob #(parameter int CMPL_W = 32,
   // Combinatorial Logic                                                      //
   //                                                                          //
   // ======================================================================== //
-
-  // Validate reported status conditions.
-  //
-  `libtb2_assert({idle_r,full_r} != '1);
-
-  // Validate no attempts to complete to an idle ROB.
-  //
-  `libtb2_assert(!cmpl_vld || (~idle_r));
-
-  // Validate no attempts to alloc to a full ROB.
-  //
-  `libtb2_assert(!alloc_vld || (~full_r));
   
   // ------------------------------------------------------------------------ //
   //

@@ -25,5 +25,11 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-emit_answer(
-  tb_tomasulo tomasulo.sv tomasulo.cpp)
+emit_solution(
+  TARGET
+  tb_tomasulo
+  VTOP
+  tomasulo.sv
+  TB
+  tomasulo.cpp
+  )
