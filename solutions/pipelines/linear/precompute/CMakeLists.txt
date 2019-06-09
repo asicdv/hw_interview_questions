@@ -25,5 +25,11 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-emit_answer(
-  tb_precompute precompute.sv precompute.cpp)
+emit_solution(
+  TARGET
+  tb_precompute
+  VTOP
+  precompute.sv
+  TB
+  precompute.cpp
+  )
