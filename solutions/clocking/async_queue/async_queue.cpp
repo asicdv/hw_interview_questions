@@ -180,6 +180,7 @@ TEST(AsyncQueueTest, Basic) {
         }
         top_.t_await_wcycles();
       }
+      top_.push = false;
       finish();
     }
     void t_checker() {
