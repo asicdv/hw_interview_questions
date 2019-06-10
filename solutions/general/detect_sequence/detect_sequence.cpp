@@ -115,7 +115,10 @@ TEST(DetectSequenceTest, Basic) {
   const std::size_t n{1024 << 10};
   auto task = std::make_unique<tb::BasicNotFailTask<TOP> >(top);
 
-  tb::Random::UniformRandomInterval<bool> rnd{};
+  tb::Random::Bag<bool> rnd{};
+  rnd.add(false);
+  rnd.add(true);
+  rnd.finalize();
   for (std::size_t i = 0; i < n; i++)
     task->add_stimulus(Stimulus{rnd()});
   TaskRunner.set_task(std::move(task));
