@@ -1,6 +1,3 @@
-`ifndef __READ_MODIFY_WRITE_PKG_VH__
-`define __READ_MODIFY_WRITE_PKG_VH__
-
 //========================================================================== //
 // Copyright (c) 2018, Stephen Henry
 // All rights reserved.
@@ -27,6 +24,9 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
+
+`ifndef __READ_MODIFY_WRITE_PKG_VH__
+`define __READ_MODIFY_WRITE_PKG_VH__
 
 package read_modify_write_pkg;
 

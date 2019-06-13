@@ -30,6 +30,7 @@
 
 find_path(SystemC_INCLUDE_DIR systemc
   PATH_SUFFIXES include
+  HINTS /tools/systemc/latest/include
   HINTS /opt/systemc/include
   HINTS /usr/local/systemc/include
   HINTS $ENV{HOME}/pkgs/systemc/include
@@ -38,6 +39,7 @@ find_path(SystemC_INCLUDE_DIR systemc
   )
 
 find_library(SystemC_LIB systemc
+  HINTS /tools/systemc/latest/lib-linux64
   HINTS /opt/systemc/lib
   HINTS /opt/systemc/lib-macosx64
   HINTS /usr/local/systemc/lib
