@@ -110,6 +110,7 @@ struct Random {
         add(*it);
       finalize();
     }
+    void clear() { v_.clear(); }
     void finalize() { r_ = UniformRandomInterval<std::size_t>{v_.size() - 1}; }
     T operator()() { return v_[r_()]; }
    private:
