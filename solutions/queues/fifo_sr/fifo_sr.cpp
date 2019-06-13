@@ -43,7 +43,6 @@ using word_type = uint32_t;
   __func(empty_r, bool)                         \
   __func(full_r, bool)
 
-
 struct Stimulus {
   friend std::ostream & operator<<(std::ostream & os, const Stimulus & stim) {
     return os << "'{data=" << stim.data() << "}";

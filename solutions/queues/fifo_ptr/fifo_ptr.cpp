@@ -25,218 +25,206 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-#include <libtb2.hpp>
+#include "libtb/libtb.hpp"
+#include "libtb/verilator.hpp"
+#include <gtest/gtest.h>
+#include <vector>
 #include <deque>
 #include "vobj/Vfifo_ptr.h"
 
-#define FIFO_PORTS(__func)                      \
+using word_type = uint32_t;
+
+#define PORTS(__func)                           \
     __func(push, bool)                          \
-    __func(push_data, T)                        \
+    __func(push_data, word_type)                \
     __func(pop, bool)                           \
-    __func(pop_data, T)                         \
+    __func(pop_data, word_type)                 \
     __func(flush, bool)                         \
     __func(commit, bool)                        \
     __func(replay, bool)                        \
     __func(empty_r, bool)                       \
     __func(full_r, bool)
 
-typedef Vfifo_ptr uut_t;
-
-template<typename T>
-struct PushIntf : sc_core::sc_interface {
-  virtual void idle() = 0;
-  virtual void bpush(const T & t) = 0;
-  virtual bool is_full() const = 0;
-};
-
-template<typename T>
-struct PopIntf : sc_core::sc_interface {
-  virtual void idle() = 0;
-  virtual T bpop() = 0;
-  virtual bool is_empty() const = 0;
-};
-
-template<typename T>
-struct PushXactor : sc_core::sc_module, PushIntf<T> {
-  sc_core::sc_in<bool> clk;
-
-  sc_core::sc_in<bool> full_r;
-
-  sc_core::sc_out<bool> push;
-  sc_core::sc_out<T> push_data;
-  
-  SC_HAS_PROCESS(PushXactor);
-  PushXactor(libtb2::Sampler & s, sc_core::sc_module_name mn = "pushxactor")
-      : s_(s), full_r("full_r"), push("push"), push_data("push_data") {
+struct Stimulus {
+  friend std::ostream & operator<<(std::ostream & os, const Stimulus & stim) {
+    return os << "'{data=" << stim.data() << "}";
   }
-  void idle() {
-    push = false;
-    push_data = T();
-  }
-  void bpush(const T & t) {
-    while (full_r)
-      wait(clk.posedge_event());
-
-    push = true;
-    push_data = t;
-    wait(clk.posedge_event());
-    idle();
-  }
-  bool is_full() const { return full_r; }
+  Stimulus(word_type data) : data_(data) {}
+  word_type data() const { return data_; }
  private:
-  libtb2::Sampler & s_;
+  word_type data_;
 };
 
-template<typename T>
-struct PopXactor : sc_core::sc_module, PopIntf<T> {
-  sc_core::sc_in<bool> clk;
-
-  sc_core::sc_in<bool> empty_r;
-  
-  sc_core::sc_out<bool> pop;
-  sc_core::sc_in<T> pop_data;
-  
-  SC_HAS_PROCESS(PopXactor);
-  PopXactor(libtb2::Sampler & s, sc_core::sc_module_name mn = "popxactor")
-      : s_(s), empty_r("empty_r"), pop("pop"), pop_data("pop_data") {
+struct Expect {
+  friend std::ostream & operator<<(std::ostream & os, const Expect & res) {
+    return os << "'{data=" << res.data() << "}";
   }
-  void idle() {
+  friend bool operator==(const Expect & a, const Expect & b) {
+    return (a.data() == b.data());
+  }
+  Expect(word_type data) : data_(data) {}
+  word_type data() const { return data_; }
+ private:
+  word_type data_;
+};
+
+struct TOP : tb::Top {
+  using stimulus_type = Stimulus;
+  using expected_type = Expect;
+
+  TOP() {
+    v.rst(rst);
+    v.clk(clk);
+#define __bind_signals(__name, __type)          \
+    v.__name(__name);
+    PORTS(__bind_signals)
+#undef __bind_signals
+    start_tracing();
+  }
+  ~TOP() {
+    stop_tracing();
+  }
+  void push_idle() {
+    push = false;
+    push_data = word_type{};
+  }
+  void t_push(const stimulus_type & stim) {
+    t_wait_not_full();
+    push = true;
+    push_data = stim.data();
+    t_await_cycles(1);
+    push_idle();
+  }
+  void pop_idle() {
     pop = false;
   }
-  T bpop() {
-    while (empty_r)
-      wait(empty_r.posedge_event());
-
-    wait(s_.sample());
-    const T t = pop_data;
+  Expect t_pop() {
+    word_type data;
+    t_wait_not_empty();
     pop = true;
-    wait(clk.posedge_event());
-    idle();
-    return t;
+    data = pop_data;
+    t_await_cycles();
+    pop_idle();
+    return Expect{data};
   }
-  bool is_empty() const { return empty_r; }
+  void t_apply_reset() {
+    rst = true;
+    t_await_cycles(2);
+    rst = false;
+    t_await_cycles(2);
+  }
+  void t_wait_not_full() {
+    while (full_r)
+      t_await_cycles();
+  }
+  void t_wait_not_empty() {
+    while (empty_r)
+      t_await_cycles();
+  }
+  void t_await_cycles(std::size_t n = 1) {
+    while (n--)
+      wait(clk.negedge_event());
+  }
+  Vfifo_ptr v{"fifo_ptr"};
+  ::sc_core::sc_signal<bool> rst{"rst"};
+  ::sc_core::sc_clock clk{"clk"};
+#define __declare_signal(__name, __type)        \
+  ::sc_core::sc_signal<__type> __name{#__name};
+  PORTS(__declare_signal)
+#undef __declare_signal
  private:
-  libtb2::Sampler & s_;
- };
-
-template<typename T>
-struct FifoPtrTb : libtb2::Top<FifoPtrTb<T> > {
-  typedef T value_type;
-
-  sc_core::sc_port<PushIntf<T> > push_intf_;
-  sc_core::sc_port<PopIntf<T> > pop_intf_;
-  
-  SC_HAS_PROCESS(FifoPtrTb);
-  FifoPtrTb(sc_core::sc_module_name mn = "t")
-      : uut_("uut")
-      , x_push_(sampler_, "PushXactor")
-      , x_pop_(sampler_, "PopXactor") {
-    //
-    x_push_.clk(clk_);
-    x_push_.full_r(full_r_);
-    x_push_.push(push_);
-    x_push_.push_data(push_data_);
-    
-    push_intf_.bind(x_push_);
-
-    //
-    x_pop_.clk(clk_);
-    x_pop_.empty_r(empty_r_);
-    x_pop_.pop(pop_);
-    x_pop_.pop_data(pop_data_);
-    
-    pop_intf_.bind(x_pop_);
-
-    //
-    wd_.clk(clk_);
-
-    //
-    resetter_.clk(clk_);
-    resetter_.rst(rst_);
-
-    //
-    sampler_.clk(clk_);
-
-    //
-#define __bind_ports(__name, __type)            \
-    uut_.__name(__name ## _);
-    FIFO_PORTS(__bind_ports)
-#undef __bind_ports
-    uut_.rst(rst_);
-    uut_.clk(clk_);
-
-    SC_THREAD(t_push);
-    SC_THREAD(t_pop);
-
-    st_.reset();
+  void start_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    Verilated::traceEverOn(true);
+    vcd_ = std::make_unique<VerilatedVcdSc>();
+    v.trace(vcd_.get(), 99);
+    vcd_->open("sim.vcd");
+#endif
   }
- private:
-  void t_push() {
-    scv_smart_ptr<T> d;
-
-    resetter_.wait_reset_done();
-    while (true) {
-      if (!push_intf_->is_full()) {
-        d->next();
-        push_intf_->bpush(*d);
-        expected_.push_back(*d);
-        st_.pushes++;
-      } else {
-        wait(clk_.posedge_event());
-      }
-    }
+  void stop_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    vcd_->close();
+#endif
   }
-  void t_pop() {
-    const libtb2::Options & o = libtb2::Sim::get_options();
-
-    resetter_.wait_reset_done();
-    while (true) {
-      if (!pop_intf_->is_empty()) {
-        LIBTB2_ASSERT(!expected_.empty());
-        
-        const T actual = pop_intf_->bpop();
-        const T expected = expected_.front(); expected_.pop_front();
-        st_.pops++;
-      
-        LIBTB2_ERROR_ON(actual != expected);
-        if (o.debug_on()) {
-          LOGGER(DEBUG) << " Actual=" << actual
-                        << " Expected=" << expected << "\n";
-        }
-      } else {
-        wait(clk_.posedge_event());
-      }
-    }
-  }
-  void end_of_simulation() {
-    LOGGER(INFO) << "Pushes: " << st_.pushes << "\n";
-    LOGGER(INFO) << "Pops: " << st_.pops << "\n";
-  }
-
-  struct {
-    void reset() {
-      pushes = 0;
-      pops = 0;
-    }
-    std::size_t pushes, pops;
-  } st_;
-  sc_core::sc_clock clk_;
-  sc_core::sc_signal<bool> rst_;
-  uut_t uut_;
-  PushXactor<T> x_push_;
-  PopXactor<T> x_pop_;
-#define __declare_signals(__name, __type)       \
-  sc_core::sc_signal<__type> __name ## _;
-  FIFO_PORTS(__declare_signals)
-#undef __declare_signals
-  libtb2::Resetter resetter_;
-  libtb2::SimWatchDogCycles wd_;
-  libtb2::Sampler sampler_;
-  std::deque<T> expected_;
+#ifdef OPT_ENABLE_TRACE
+  std::unique_ptr<VerilatedVcdSc> vcd_;
+#endif
 };
-SC_MODULE_EXPORT(FifoPtrTb<int>);
 
-int sc_main(int argc, char **argv) {
-  FifoPtrTb<uint32_t> tb;
-  return libtb2::Sim::start(argc, argv);
+namespace {
+
+TOP top;
+tb::TaskRunner TaskRunner;
+
+} // namespace
+
+TEST(MultiplierTest, Basic) {
+  const std::size_t n{1024 << 6};
+  struct FifoNTask : tb::Task {
+    FifoNTask(TOP & top) : top_(top) {
+      bgbool.add(false, 10);
+      bgbool.add(true, 10);
+      bgbool.finalize();
+    }
+    void add_stimulus(const Stimulus & s) {
+      stimulus_.push_back(s);
+    }
+    void execute() override {
+      using namespace sc_core;
+
+      top_.t_apply_reset();
+      
+      sc_process_handle h_pusher = 
+        sc_spawn(std::bind(&FifoNTask::t_pusher, this), "t_pusher");
+      sc_process_handle h_popper = 
+        sc_spawn(std::bind(&FifoNTask::t_popper, this), "t_popper");
+    }
+   private:
+    void t_pusher() {
+      while (!stimulus_.empty()) {
+        top_.push_idle();
+        if (bgbool()) {
+          const Stimulus & stim{stimulus_.front()};
+          top_.t_push(stim);
+          expect_.push_back(Expect{stim.data()});
+          stimulus_.pop_front();
+        }
+        top_.t_await_cycles();
+      }
+      top_.push_idle();
+      finish();
+    }
+    void t_popper() {
+      bool done{false};
+      while (!done) {
+        if (expect_.empty()) {
+          done = stimulus_.empty();
+          if (!done)
+            top_.t_await_cycles(10);
+        } else {
+          const Expect rtl{top_.t_pop()};
+          const Expect tb{expect_.front()};
+          ASSERT_EQ(rtl, tb);
+          expect_.pop_front();
+        }
+      }
+    }
+    std::deque<Expect> expect_;
+    std::deque<Stimulus> stimulus_;
+    tb::Random::Bag<bool> bgbool;
+    TOP & top_;
+  };
+  
+  auto task = std::make_unique<FifoNTask>(top);
+    tb::Random::UniformRandomInterval<word_type> rnd{};
+  for (std::size_t i = 0; i < n; i++)
+    task->add_stimulus(Stimulus{rnd()});
+  TaskRunner.set_task(std::move(task));
+  TaskRunner.run_until_exhausted(true);
+}
+
+int sc_main(int argc, char ** argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  ::tb::initialize(argc, argv);
+  return RUN_ALL_TESTS();
 }

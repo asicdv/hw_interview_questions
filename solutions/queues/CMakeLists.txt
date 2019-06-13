@@ -27,7 +27,7 @@
 
 add_subdirectory(fifo_n)
 add_subdirectory(fifo_sr)
-#add_subdirectory(fifo_ptr)
+add_subdirectory(fifo_ptr)
 #add_subdirectory(fifo_multi_push)
 #add_subdirectory(linked_list_fifo)
 #add_subdirectory(doubly_linked_list)

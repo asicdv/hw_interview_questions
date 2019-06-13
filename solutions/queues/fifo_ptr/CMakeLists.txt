@@ -25,5 +25,12 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-emit_answer(tb_fifo_ptr fifo_ptr.sv fifo_ptr.cpp)
+emit_solution(
+  TARGET
+  tb_fifo_ptr
+  VTOP
+  fifo_ptr.sv
+  TB
+  fifo_ptr.cpp
+  )
 
