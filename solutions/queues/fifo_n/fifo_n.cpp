@@ -195,7 +195,7 @@ TEST(MultiplierTest, Basic) {
     void t_pusher() {
       while (!stimulus_.empty()) {
         top_.push_idle();
-        if (bgbool() && !top_.full_r) {
+        if (bgbool()) {
           const Stimulus & stim{stimulus_.front()};
           top_.t_push(stim);
           expect_[stim.vq()].push_back(Expect{stim.data(), stim.vq()});
