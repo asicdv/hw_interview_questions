@@ -240,7 +240,6 @@ TEST(DoubleBufferTest, Basic) {
   tb::Random::UniformRandomInterval<uint32_t> rnd_reg{31, 0};
 
   tb::Random::Bag<OP> opbg;
-  opbg.add(OP::NOP);
   opbg.add(OP::AND);
   opbg.add(OP::NOT);
   opbg.add(OP::OR);
