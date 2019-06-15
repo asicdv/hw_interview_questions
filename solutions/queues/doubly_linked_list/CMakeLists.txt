@@ -25,4 +25,11 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-emit_answer(tb_doubly_linked_list doubly_linked_list.sv doubly_linked_list.cpp)
+emit_solution(
+  TARGET
+  tb_doubly_linked_list
+  VTOP
+  doubly_linked_list.sv
+  TB
+  doubly_linked_list.cpp
+  )
