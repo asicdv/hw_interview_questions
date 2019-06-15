@@ -25,201 +25,205 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-#include <libtb2.hpp>
-#include "vobj/Vrob.h"
-#include <deque>
-#include <map>
-#include <set>
 
-typedef Vrob uut_t;
+#include "libtb/libtb.hpp"
+#include "libtb/verilator.hpp"
+#include <gtest/gtest.h>
+#include <vector>
+#include <deque>
+#include <tuple>
+#include <set>
+#include <algorithm>
+#include "vobj/Vrob.h"
+
+using word_type = uint32_t;
 
 #define PORTS(__func)                           \
   __func(alloc_vld, bool)                       \
-  __func(alloc_data, uint32_t)                  \
+  __func(alloc_data, word_type)                 \
   __func(alloc_rdy, bool)                       \
-  __func(alloc_id, uint32_t)                    \
+  __func(alloc_id, word_type)                   \
   __func(cmpl_vld, bool)                        \
-  __func(cmpl_id, uint32_t)                     \
-  __func(cmpl_data, uint32_t)                   \
+  __func(cmpl_id, word_type)                    \
+  __func(cmpl_data, word_type)                  \
   __func(retire_rdy, bool)                      \
-  __func(retire_cmpl_data, uint32_t)            \
-  __func(retire_alloc_data, uint32_t)           \
+  __func(retire_cmpl_data, word_type)           \
+  __func(retire_alloc_data, word_type)          \
   __func(retire_vld, bool)                      \
   __func(clear, bool)                           \
   __func(idle_r, bool)                          \
   __func(full_r, bool)
 
-class MachineModel {
-  
-  struct State {
-    uint32_t alloc_data;
-    uint32_t cmpl_data;
-    uint32_t id;
-  };
-  typedef std::map<uint32_t, State *>::iterator s_it_t;
-
-public:
-  MachineModel()
-  {}
-
-  void apply_allocation(uint32_t id, uint32_t alloc_data) {
-    if (s_.find(id) != s_.end())
-      LOGGER(ERROR) << "Attempt to allocate in flight id = " << id << "\n";
-
-    State * s = fp_.alloc();
-    s->id = id;
-    s->alloc_data = alloc_data;
-    d_.push_back(s);
-    s_.insert(std::make_pair(id, s));
+struct TOP : tb::Top {
+  TOP() {
+    v.rst(rst);
+    v.clk(clk);
+#define __bind_signals(__name, __type)          \
+    v.__name(__name);
+    PORTS(__bind_signals)
+#undef __bind_signals
+    start_tracing();
   }
-
-  void apply_completion(uint32_t id, uint32_t cmpl_data) {
-    s_it_t it = s_.find(id);
-    if (it == s_.end())
-      LOGGER(ERROR) << "Completing unknown id = " << id << "\n";
-
-    LIBTB2_ASSERT(it->id == id);
-    State * s = it->second;
-    s->cmpl_data = cmpl_data;
-  };
-
-  void check_retirement(uint32_t alloc_data, uint32_t cmpl_data) {
-    State * s = d_.front();
-
-    bool error = false;
-    if (s->alloc_data != alloc_data) {
-      error = true;
-      LOGGER(ERROR) << "Allocation data mismatch:"
-                    << " expected = " << s->alloc_data
-                    << " actual = " << alloc_data
-                    << "\n";
-    }
-    if (s->cmpl_data != cmpl_data) {
-      error = true;
-      LOGGER(ERROR) << "Completion data mismatch:"
-                    << " expected = " << s->cmpl_data
-                    << " actual = " << cmpl_data
-                    << "\n";
-    }
-
-    if (!error)
-      LOGGER(INFO) << "ID validated on retirement. ID = " << s->id << "\n";
-
-    d_.pop_front();
-    s_.erase(s_.find(s->id));
-    fp_.free(s);
+  ~TOP() {
+    stop_tracing();
   }
-private:
-  libtb2::FreePool<State> fp_;
-  std::map<uint32_t, State *> s_;
-  std::deque<State *> d_;
-};
+  void alloc_idle() {
+    alloc_vld = false;
+    alloc_data = word_type{};
+  }
+  word_type t_alloc_issue(word_type data) {
+    word_type id;
+    alloc_vld = true;
+    alloc_data = data;
+    id = alloc_id;
+    do { t_await_cycles(1); } while (!alloc_rdy);
+    alloc_idle();
+    return id;
+  }
+  void cmpl_idle() {
+    cmpl_vld = false;
+    cmpl_id = word_type{};
+    cmpl_data = word_type{};
+  }
+  void cmpl_issue(word_type id, word_type data) {
+    cmpl_vld = true;
+    cmpl_id = id;
+    cmpl_data = data;
+    t_await_cycles(1);
+    cmpl_idle();
+  }
+  auto t_retire() {
+    retire_rdy = true;
+    while (!retire_vld)
+      t_await_cycles();
 
-struct RobTb : libtb2::Top<RobTb> {
-  SC_HAS_PROCESS(RobTb);
-  RobTb(sc_core::sc_module_name mn = "t")
-    : uut_("uut")
-  {
-    //
-    resetter_.clk(clk_);
-    resetter_.rst(rst_);
-    //
-    sampler_.clk(clk_);
-    //
-    wd_.clk(clk_);
-    //
-    uut_.clk(clk_);
-    uut_.rst(rst_);
-#define __bind_ports(__name, __type)            \
-    uut_.__name(__name ## _);
-    PORTS(__bind_ports)
-#undef __bind_ports
-
-    SC_THREAD(t_allocation);
-    SC_THREAD(t_completion);
-    SC_METHOD(m_retirement);
-    sensitive << sampler_.sample();
+    auto res{std::make_tuple(retire_cmpl_data.read(), retire_alloc_data.read())};
+    t_await_cycles();
+    return res;
   }
-private:
-  void t_allocation() {
-    scv_smart_ptr<uint32_t> palloc_data;
-    alloc_vld_ = false;
-    resetter_.wait_reset_done();
-    while (true) {
-      alloc_vld_ = false;
-      wait_cycles(libtb2::random(2));
-      sampler_.wait_for_sample();
-      if (alloc_rdy_) {
-        palloc_data->next();
-        const uint32_t alloc_id = alloc_id_;
-        const uint32_t alloc_data = *palloc_data;
-        
-        alloc_vld_ = true;
-        alloc_data_ = alloc_data;
-
-        mdl_.apply_allocation(alloc_id, alloc_data);
-        active_ids_.insert(alloc_id);
-        wait_cycles(1);
-        LOGGER(INFO) << "Allocation of ID = "
-                     << alloc_id << " DATA = " << alloc_data << "\n";
-      }
-    }
+  void t_apply_reset() {
+    rst = true;
+    t_await_cycles(2);
+    rst = false;
+    t_await_cycles(2);
   }
-  void t_completion() {
-    scv_smart_ptr<uint32_t> pcmpl_data;
-    cmpl_vld_ = false;
-    resetter_.wait_reset_done();
-    while (true) {
-      cmpl_vld_ = false;
-      wait_cycles(libtb2::random(3));
-      if (active_ids_.size() != 0) {
-        pcmpl_data->next();
-        const uint32_t cmpl_data = *pcmpl_data;
-        const uint32_t id =
-          *libtb2::choose(active_ids_.begin(), active_ids_.end());
-
-        cmpl_vld_ = true;
-        cmpl_id_ = id;
-        cmpl_data_ = cmpl_data;
-        wait_cycles(1);
-        LOGGER(INFO) << "Completion of ID = "
-                     << id << " DATA = " << cmpl_data << "\n";
-        mdl_.apply_completion(id, cmpl_data);
-        std::set<uint32_t>::iterator it = active_ids_.find(id);
-        LIBTB2_ASSERT(it != active_ids_.end());
-        active_ids_.erase(it);
-      }
-    }
+  void t_await_cycles(std::size_t n = 1) {
+    while (n--)
+      wait(clk.negedge_event());
   }
-  void m_retirement() {
-    retire_rdy_ = true;
-    if (retire_vld_) {
-      mdl_.check_retirement(retire_alloc_data_, retire_cmpl_data_);
-      LOGGER(INFO) << "Retiring ALLOC_DATA = "
-                   << retire_alloc_data_ << " CMPL_DATA = " << retire_cmpl_data_
-                   << "\n";
-    }
-  }
-  void wait_cycles(std::size_t cycles = 1) {
-    while (cycles--)
-      wait(clk_.posedge_event());
-  }
-  sc_core::sc_clock clk_;
-  sc_core::sc_signal<bool> rst_;
+  Vrob v{"rob"};
+  ::sc_core::sc_signal<bool> rst{"rst"};
+  ::sc_core::sc_clock clk{"clk"};
 #define __declare_signal(__name, __type)        \
-  sc_core::sc_signal<__type> __name##_;
+  ::sc_core::sc_signal<__type> __name{#__name};
   PORTS(__declare_signal)
 #undef __declare_signal
-  libtb2::Resetter resetter_;
-  libtb2::Sampler sampler_;
-  libtb2::SimWatchDogCycles wd_;
-  std::set<uint32_t> active_ids_;
-  MachineModel mdl_;
-  uut_t uut_;
+ private:
+  void start_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    Verilated::traceEverOn(true);
+    vcd_ = std::make_unique<VerilatedVcdSc>();
+    v.trace(vcd_.get(), 99);
+    vcd_->open("sim.vcd");
+#endif
+  }
+  void stop_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    vcd_->close();
+#endif
+  }
+#ifdef OPT_ENABLE_TRACE
+  std::unique_ptr<VerilatedVcdSc> vcd_;
+#endif
 };
-SC_MODULE_EXPORT(RobTb);
 
-int sc_main(int argc, char **argv) {
-  RobTb tb;
-  return libtb2::Sim::start(argc, argv);
+namespace {
+
+TOP top;
+tb::TaskRunner TaskRunner;
+
+} // namespace
+
+TEST(RobTest, Basic) {
+  const std::size_t n{1024 << 6};
+  struct FifoNTask : tb::Task {
+    FifoNTask(TOP & top) : top_(top) {
+    }
+    void add_stimulus(word_type w) {
+      stimulus_.push_back(w);
+    }
+    void execute() override {
+      using namespace sc_core;
+
+      top_.t_apply_reset();
+      
+      sc_process_handle h_alloc = 
+        sc_spawn(std::bind(&FifoNTask::t_alloc, this), "t_alloc");
+      sc_process_handle h_cmpl = 
+        sc_spawn(std::bind(&FifoNTask::t_cmpl, this), "t_cmpl");
+      sc_process_handle h_retire = 
+        sc_spawn(std::bind(&FifoNTask::t_retire, this), "t_retire");
+    }
+   private:
+    void t_alloc() {
+      tb::Random::UniformRandomInterval<word_type> dly{9, 0};
+      for (std::size_t i = 0; i < stimulus_.size(); i++) {
+        const word_type alloc_data{stimulus_[i]};
+        const word_type id{top_.t_alloc_issue(alloc_data)};
+
+        alloc_data_[id] = alloc_data;
+        pending_.insert(id);
+        expect_.push_back(id);
+
+        top_.t_await_cycles(dly());
+      }
+      finish();
+    }
+    void t_cmpl() {
+      tb::Random::UniformRandomInterval<word_type> dly{9, 0};
+      tb::Random::UniformRandomInterval<word_type> word;
+      tb::Random::Bag<word_type> bg;
+      while (true) {
+        top_.t_await_cycles(dly());
+        if (!pending_.empty()) {
+          bg.add(pending_.begin(), pending_.end());
+
+          const word_type cmpl_id{bg()};
+          pending_.erase(pending_.find(cmpl_id));
+
+          const word_type cmpl_data{word()};
+          top_.cmpl_issue(cmpl_id, cmpl_data);
+          cmpl_data_[cmpl_id] = cmpl_data;
+          bg.clear();
+        }
+      }
+    }
+    void t_retire() {
+      while (true) {
+        auto const rtlout{top_.t_retire()};
+        const word_type id{expect_.front()};
+        auto const tbout{std::make_tuple(cmpl_data_[id], alloc_data_[id])};
+        ASSERT_EQ(rtlout, tbout) << ::sc_core::sc_time_stamp();
+        expect_.pop_front();
+      }
+    }
+    TOP & top_;
+    std::map<word_type, word_type> alloc_data_, cmpl_data_;
+    std::set<word_type> pending_;
+    std::deque<word_type> stimulus_;
+    std::deque<word_type> expect_;
+  };
+  
+  auto task = std::make_unique<FifoNTask>(top);
+    tb::Random::UniformRandomInterval<word_type> rnd_data{};
+  for (std::size_t i = 0; i < n; i++)
+    task->add_stimulus(rnd_data());
+  TaskRunner.set_task(std::move(task));
+  TaskRunner.run_until_exhausted(true);
+}
+
+int sc_main(int argc, char ** argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  ::tb::initialize(argc, argv);
+  return RUN_ALL_TESTS();
 }

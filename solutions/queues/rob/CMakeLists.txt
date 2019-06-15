@@ -25,4 +25,11 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-emit_answer(tb_rob rob.sv rob.cpp)
+emit_solution(
+  TARGET
+  tb_rob
+  VTOP
+  rob.sv
+  TB
+  rob.cpp
+  )

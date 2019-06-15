@@ -42,4 +42,5 @@ package rob_pkg;
   typedef logic [DATA_W-1:0] data_t;
 
 endpackage // rob_pkg
+
 `endif

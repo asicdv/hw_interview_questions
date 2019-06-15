@@ -175,7 +175,7 @@ tb::TaskRunner TaskRunner;
 
 } // namespace
 
-TEST(MultiplierTest, Basic) {
+TEST(DoublyLinkedListTest, Basic) {
   const std::size_t n{1024 << 6};
   struct FifoNTask : tb::Task {
     FifoNTask(TOP & top) : top_(top) {

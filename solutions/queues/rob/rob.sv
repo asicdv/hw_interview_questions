@@ -29,7 +29,6 @@
 // ==================================================================== //
 
 `include "rob_pkg.vh"
-`include "libtb2.vh"
 
 module rob (
 
@@ -90,16 +89,6 @@ module rob (
    , output logic                            idle_r
    , output logic                            full_r
 );
-  `include "libtb2_bdy.vh"
-
-  //
-  `libtb2_static_assert(rob_pkg::ID_N > 0);
-
-  // Export parameterizations to TB
-  //
-  `libtb2_export_int(ID_N, rob_pkg::ID_N);
-  `libtb2_export_int(DATA_W, rob_pkg::DATA_W);
-
   //
   typedef logic [$clog2(rob_pkg::ID_N)-1:0]  id_t;
 
@@ -146,18 +135,6 @@ module rob (
   // Combinatorial Logic                                                      //
   //                                                                          //
   // ======================================================================== //
-
-  // Validate reported status conditions.
-  //
-  `libtb2_assert({idle_r,full_r} != '1);
-
-  // Validate no attempts to complete to an idle ROB.
-  //
-  `libtb2_assert(!cmpl_vld || (~idle_r));
-
-  // Validate no attempts to alloc to a full ROB.
-  //
-  `libtb2_assert(!alloc_vld || (~full_r));
   
   // ------------------------------------------------------------------------ //
   //
