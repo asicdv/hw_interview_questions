@@ -1,5 +1,5 @@
 //========================================================================== //
-// Copyright (c) 2016, Stephen Henry
+// Copyright (c) 2017, Stephen Henry
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -25,223 +25,248 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-#include <libtb2.hpp>
-#include <deque>
+#include "libtb/libtb.hpp"
+#include "libtb/verilator.hpp"
+#include <gtest/gtest.h>
 #include <vector>
-#include <algorithm>
-#include <iomanip>
+#include <deque>
 #include "vobj/Vfifo_multi_push.h"
+
+using word_type = uint32_t;
 
 #define PORTS(__func)                           \
   __func(push_0, bool)                          \
-  __func(push_0_data, uint32_t)                 \
+  __func(push_0_data, word_type)                \
   __func(push_1, bool)                          \
-  __func(push_1_data, uint32_t)                 \
+  __func(push_1_data, word_type)                \
   __func(push_2, bool)                          \
-  __func(push_2_data, uint32_t)                 \
+  __func(push_2_data, word_type)                \
   __func(push_3, bool)                          \
-  __func(push_3_data, uint32_t)                 \
+  __func(push_3_data, word_type)                \
   __func(pop_0, bool)                           \
-  __func(pop_0_data_r, uint32_t)                \
+  __func(pop_0_data_r, word_type)               \
   __func(pop_0_valid_r, bool)                   \
   __func(empty_r, bool)                         \
-  __func(full_r, uint32_t)
+  __func(full_r, word_type)
 
-struct FifoMultiPushCmd {
-  //
-  uint32_t push;
-  uint32_t push_0_data;
-  uint32_t push_1_data;
-  uint32_t push_2_data;
-  uint32_t push_3_data;
+struct Stimulus {
+  friend std::ostream & operator<<(std::ostream & os, const Stimulus & stim) {
+    os << "'{";
+    for (std::size_t i = 0; i < 4; i++) {
+      os << ((i != 0) ? "," : "")
+         << "push[" << i << "]=" << stim.push(i)
+         << ",push_data[" << i << "]=" << stim.push_data(i);
+    }
+    return os << "}";
+  }
+  Stimulus() { reset(); }
+  void reset() {
+    for (std::size_t i = 0; i < 4; i++)
+      push_[i] = false;
+  }
+  void set_push(std::size_t i, bool p = true) { push_[i] = p; }
+  void set_push_data(std::size_t i, word_type w = word_type{}) { push_data_[i] = w; }
+  bool push(std::size_t i) const { return push_[i]; }
+  word_type push_data(std::size_t i) const { return push_data_[i]; }
+ private:
+  bool push_[4];
+  word_type push_data_[4];
 };
 
-template<>
-struct scv_extensions<FifoMultiPushCmd> : public scv_extensions_base<FifoMultiPushCmd> {
-  //
-  scv_extensions<uint32_t> push;
-  scv_extensions<uint32_t> push_0_data;
-  scv_extensions<uint32_t> push_1_data;
-  scv_extensions<uint32_t> push_2_data;
-  scv_extensions<uint32_t> push_3_data;
-
-  SCV_EXTENSIONS_CTOR(FifoMultiPushCmd) {
-    SCV_FIELD(push);
-    SCV_FIELD(push_0_data);
-    SCV_FIELD(push_1_data);
-    SCV_FIELD(push_2_data);
-    SCV_FIELD(push_3_data);
+struct Expect {
+  friend std::ostream & operator<<(std::ostream & os, const Expect & res) {
+    return os << "'{data=" << res.data() << "}";
   }
+  friend bool operator==(const Expect & a, const Expect & b) {
+    if (a.data() != b.data())
+      return false;
+
+    return true;
+  }
+  Expect(word_type data) : data_(data) {}
+  word_type data() const { return data_; }
+ private:
+  word_type data_;
 };
 
-struct FifoMultiPushCmdConstraint : scv_constraint_base {
-  scv_smart_ptr<FifoMultiPushCmd> cmd;
-  SCV_CONSTRAINT_CTOR(FifoMultiPushCmdConstraint) {
-    SCV_CONSTRAINT((cmd->push() == 0x0) ||
-                   (cmd->push() == 0x1) ||
-                   (cmd->push() == 0x3) ||
-                   (cmd->push() == 0x7) ||
-                   (cmd->push() == 0xF));
+struct TOP : tb::Top {
+  using stimulus_type = Stimulus;
+  using expected_type = Expect;
+
+  TOP() {
+    v.rst(rst);
+    v.clk(clk);
+#define __bind_signals(__name, __type)          \
+    v.__name(__name);
+    PORTS(__bind_signals)
+#undef __bind_signals
+    start_tracing();
   }
+  ~TOP() {
+    stop_tracing();
+  }
+  void push_idle() {
+    push_0 = false;
+    push_0_data = word_type{};
+    push_1 = false;
+    push_1_data = word_type{};
+    push_2 = false;
+    push_2_data = word_type{};
+    push_3 = false;
+    push_3_data = word_type{};
+  }
+  void t_push(const stimulus_type & stim) {
+    t_wait_not_full();
+    //
+    push_0 = stim.push(0);
+    push_0_data = stim.push_data(0);
+    //
+    push_1 = stim.push(1);
+    push_1_data = stim.push_data(1);
+    //
+    push_2 = stim.push(2);
+    push_2_data = stim.push_data(2);
+    //
+    push_3 = stim.push(3);
+    push_3_data = stim.push_data(3);
+
+    t_await_cycles(1);
+    push_idle();
+  }
+  void pop_idle() {
+    pop_0 = false;
+  }
+  Expect t_pop() {
+    t_wait_not_empty();
+    pop_0 = true;
+    t_await_cycles();
+    pop_idle();
+    return Expect{pop_0_valid_r};
+  }
+  void t_apply_reset() {
+    rst = true;
+    t_await_cycles(2);
+    rst = false;
+    t_await_cycles(2);
+  }
+  void t_wait_not_full() {
+    while (full_r)
+      t_await_cycles();
+  }
+  void t_wait_not_empty() {
+    while (empty_r)
+      t_await_cycles();
+  }
+  void t_await_cycles(std::size_t n = 1) {
+    while (n--)
+      wait(clk.negedge_event());
+  }
+  Vfifo_multi_push v{"fifo_multi_push"};
+  ::sc_core::sc_signal<bool> rst{"rst"};
+  ::sc_core::sc_clock clk{"clk"};
+#define __declare_signal(__name, __type)        \
+  ::sc_core::sc_signal<__type> __name{#__name};
+  PORTS(__declare_signal)
+#undef __declare_signal
+ private:
+  void start_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    Verilated::traceEverOn(true);
+    vcd_ = std::make_unique<VerilatedVcdSc>();
+    v.trace(vcd_.get(), 99);
+    vcd_->open("sim.vcd");
+#endif
+  }
+  void stop_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    vcd_->close();
+#endif
+  }
+#ifdef OPT_ENABLE_TRACE
+  std::unique_ptr<VerilatedVcdSc> vcd_;
+#endif
 };
 
-struct FifoMultiPushTb : libtb2::Top<FifoMultiPushTb> {
-  typedef Vfifo_multi_push uut_t;
-  SC_HAS_PROCESS(FifoMultiPushTb);
-  FifoMultiPushTb(sc_core::sc_module_name mn = "t")
-    : uut_("uut") {
-    //
-    sampler_.clk(clk_);
-    //
-    resetter_.clk(clk_);
-    resetter_.rst(rst_);
-    //
-    wd_.clk(clk_);
-    //
-    uut_.clk(clk_);
-    uut_.rst(rst_);
-#define __declare_signals(__name, __type)       \
-    uut_.__name(__name ## _);
-    PORTS(__declare_signals)
-#undef __declare_signals
-    SC_THREAD(t_stimulus);
-    SC_THREAD(t_pop);
-    SC_METHOD(m_checker);
-    sensitive << sampler_.sample();
-    dont_initialize();
+namespace {
 
-    st_.reset();
-  }
-  void end_of_simulation() {
-    st_.report();
-  }
-private:
-  void t_pop() {
-    resetter_.wait_reset_done();
+TOP top;
+tb::TaskRunner TaskRunner;
 
-    scv_smart_ptr<bool> pop;
-    while (true) {
-      pop->next();
+} // namespace
 
-      wait(sampler_.sample());
-      pop_0_ = empty_r_ ? false : *pop;
-      wait(clk_.posedge_event());
+TEST(MultiplierTest, Basic) {
+  const std::size_t n{1024 << 6};
+  struct FifoNTask : tb::Task {
+    FifoNTask(TOP & top) : top_(top) {
+      bgbool.add(false, 10);
+      bgbool.add(true, 10);
+      bgbool.finalize();
     }
-  }
-  void m_checker() {
-    if (pop_0_valid_r_) {
-      const uint32_t actual = pop_0_data_r_;
-      const uint32_t expected = expected_.front(); expected_.pop_front();
-
-      LOGGER(INFO) << std::hex << std::setw(8) << std::setfill('0')
-                   << " Expected = 0x" << expected
-                   << " Actual = 0x" << actual
-                   << "\n";
-      LIBTB2_ERROR_ON(actual != expected);
+    void add_stimulus(const Stimulus & s) {
+      stimulus_.push_back(s);
     }
-  }
-  void t_stimulus() {
-    resetter_.wait_reset_done();
+    void execute() override {
+      using namespace sc_core;
 
-    FifoMultiPushCmdConstraint c("FifoMultiPushCmdConstraint");
-    while (true) {
-      c.next();
-
-      push_0_ = false;
-      push_1_ = false;
-      push_2_ = false;
-      push_3_ = false;
-
-      const uint32_t push = c.cmd->push;
-#define BIT_IS_SET(__w, __b) ((((__w) >> (__b)) & 0x1) == true)
-
-      if (BIT_IS_SET(full_r_, 0))
-        goto __done;
+      top_.t_apply_reset();
       
-      if (BIT_IS_SET(push, 0)) {
-        push_0_ = true;
-        push_0_data_ = c.cmd->push_0_data;
+      sc_process_handle h_pusher = 
+        sc_spawn(std::bind(&FifoNTask::t_pusher, this), "t_pusher");
+      sc_process_handle h_popper = 
+        sc_spawn(std::bind(&FifoNTask::t_popper, this), "t_popper");
+    }
+   private:
+    void t_pusher() {
+      while (!stimulus_.empty()) {
+        top_.push_idle();
+        if (bgbool()) {
+          const Stimulus & stim{stimulus_.front()};
+          top_.t_push(stim);
+          for (std::size_t i = 0; i < 4; i++) {
+            if (!stim.push(i)) break;
 
-        expected_.push_back(c.cmd->push_0_data);
-
-        st_.n++;
-        st_.cnt[0]++;
+            expect_.push_back(Expect{stim.push_data(i)});
+          }
+          stimulus_.pop_front();
+        }
+        top_.t_await_cycles();
       }
-
-      if (BIT_IS_SET(full_r_, 1))
-        goto __done;
-      
-      if (BIT_IS_SET(push, 1)) {
-        push_1_ = true;
-        push_1_data_ = c.cmd->push_1_data;
-        
-        expected_.push_back(c.cmd->push_1_data);
-
-        st_.n++;
-        st_.cnt[1]++;
-      }
-      
-      if (BIT_IS_SET(full_r_, 2))
-        goto __done;
-      
-      if (BIT_IS_SET(push, 2)) {
-        push_2_ = true;
-        push_2_data_ = c.cmd->push_2_data;
-        
-        expected_.push_back(c.cmd->push_2_data);
-
-        st_.n++;
-        st_.cnt[2]++;
-      }
-      
-      if (BIT_IS_SET(full_r_, 3))
-        goto __done;
-      
-      if (BIT_IS_SET(push, 3)) {
-        push_3_ = true;
-        push_3_data_ = c.cmd->push_3_data;
-
-        expected_.push_back(c.cmd->push_3_data);
-
-        st_.n++;
-        st_.cnt[3]++;
-      }
-#undef BIT_IS_SET
-      
-    __done:
-      wait(clk_.posedge_event());
+      top_.push_idle();
+      finish();
     }
+    void t_popper() {
+      while (stimulus_.empty() && expect_.empty()) {
+        const Expect rtl{top_.t_pop()};
+        const Expect tb{expect_.front()};
+
+        ASSERT_EQ(rtl, tb);
+        expect_.pop_front();
+      }
+    }
+    std::deque<Expect> expect_;
+    std::deque<Stimulus> stimulus_;
+    tb::Random::Bag<bool> bgbool;
+    TOP & top_;
+  };
+  
+  auto task = std::make_unique<FifoNTask>(top);
+  tb::Random::UniformRandomInterval<word_type> push{3,0}, push_data{};
+  for (std::size_t i = 0; i < n; i++) {
+    const word_type cnt{push()};
+
+    Stimulus stim{};
+    for (std::size_t n = 0; i < cnt; i++) {
+      stim.set_push(n, push());
+      stim.set_push_data(n, push_data());
+    }
+    task->add_stimulus(stim);
   }
-  struct {
-    void reset() {
-      n = 0;
-      cnt.resize(4);
-      std::fill(cnt.begin(), cnt.end(), 0);
-    }
-    void report() {
-      LOGGER(INFO) << std::dec << "n = " << n << " cnt = ";
-      for (std::size_t i = 0; i < cnt.size(); i++)
-        LOGGER(INFO) << cnt[i] << " ";
-      LOGGER(INFO) << "\n";
-    }
-    std::size_t n;
-    std::vector<std::size_t> cnt;
-  } st_;
-  std::deque<uint32_t> expected_;
-  sc_core::sc_clock clk_;
-  sc_core::sc_signal<bool> rst_;
-#define __declare_signals(__name, __type)       \
-  sc_core::sc_signal<__type> __name ## _;
-  PORTS(__declare_signals)
-#undef __declare_signals
-  libtb2::Sampler sampler_;
-  libtb2::Resetter resetter_;
-  libtb2::SimWatchDogCycles wd_;
-  uut_t uut_;
-};
-SC_MODULE_EXPORT(FifoMultiPushTb);
+  TaskRunner.set_task(std::move(task));
+  TaskRunner.run_until_exhausted(true);
+}
 
-int sc_main(int argc, char **argv) {
-  FifoMultiPushTb tb;
-  return libtb2::Sim::start(argc, argv);
+int sc_main(int argc, char ** argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  ::tb::initialize(argc, argv);
+  return RUN_ALL_TESTS();
 }
