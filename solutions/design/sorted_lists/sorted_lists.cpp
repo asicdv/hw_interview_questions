@@ -62,11 +62,32 @@ using long_type = vluint64_t;
   __func(ntf_size_r, word_type)
 
 struct Update {
+  friend bool operator==(const Update & a, const Update & b) {
+    if (a.id != b.id)
+      return false;
+    if (a.op != b.op)
+      return false;
+    if (a.size != b.size)
+      return false;
+    if (a.key != b.key)
+      return false;
+
+    return true;
+  }
+  
   word_type id, op, size;
   long_type key;
 };
 
 struct UpdateResponse {
+  friend bool operator==(const UpdateResponse & a, const UpdateResponse & b) {
+    if (a.vld != b.vld)
+      return false;
+    if (a.id != b.id)
+      return false;
+    return true;
+  }
+  
   bool vld{false};
   word_type id;
 };
@@ -76,6 +97,23 @@ struct QueryCommand {
 };
 
 struct QueryResponse {
+  friend bool operator==(const QueryResponse & a, const QueryResponse & b) {
+    if (a.vld != b.vld)
+      return false;
+    if (a.size != b.size)
+      return false;
+    if (a.listsize != b.listsize)
+      return false;
+    if (a.id != b.id)
+      return false;
+    if (a.key != b.key)
+      return false;
+    if (a.error != b.error)
+      return false;
+
+    return true;
+  }
+  
   bool vld{false};
   word_type size, listsize, id;
   long_type key;
@@ -83,6 +121,19 @@ struct QueryResponse {
 };
 
 struct Notify {
+  friend bool operator==(const Notify & a, const Notify & b) {
+    if (a.vld != b.vld)
+      return false;
+    if (a.id != b.id)
+      return false;
+    if (a.size != b.size)
+      return false;
+    if (a.key != b.key)
+      return false;
+
+    return true;
+  }
+  
   bool vld{false};
   word_type id, size;
   long_type key;
@@ -115,7 +166,7 @@ struct TOP : tb::Top {
     t_await_cycles(1);
     update_idle();
   }
-  UpdateResponse t_update_reponse() {
+  UpdateResponse t_update_response() {
     while (!upt_error_vld_r)
       t_await_cycles();
     return UpdateResponse{true, upt_error_id_r};
@@ -129,6 +180,8 @@ struct TOP : tb::Top {
     qry_level = q.level;
     t_await_cycles(1);
     query_idle();
+    // NOP cycle as per cycle.
+    t_await_cycles(1);
   }
   QueryResponse t_query_response() {
     while (!qry_resp_vld_r)
@@ -192,17 +245,6 @@ class MachineModel {
    public:
     Entry() {}
 
-    bool is_valid(const Update & u) {
-      return false;
-    }
-    bool is_valid(const QueryCommand & c) {
-      return false;
-    }
-    template<typename FwdIt>
-    void set_disable_ids(FwdIt begin, FwdIt end) {
-      disabled_ids_.clear();
-      std::copy(begin, end, std::back_inserter(disabled_ids_));
-    }
     bool query(long_type key, KV & kv) const {
       auto it = std::find_if(keys.begin(), keys.end(),
                              [&](const KV & i) { return i.key == key; });
@@ -249,7 +291,6 @@ class MachineModel {
     }
    private:
     std::vector<KV> keys;
-    std::vector<word_type> disabled_ids_;
   };
  public:
   MachineModel() {}
@@ -367,19 +408,77 @@ TEST(SortedListsTest, Basic) {
       }
     }
    private:
-    void t_consume_notifies() {
-    }
-    void t_consume_query_responses() {
-    }
-    void t_consume_update_responses() {
-    }
     void t_update(const std::vector<word_type> & ids) {
+      tb::Random::UniformRandomInterval<word_type> rnd_size;
+      tb::Random::UniformRandomInterval<long_type> rnd_key;
+      tb::Random::Bag<word_type> rnd_id;
+      rnd_id.add(ids.begin(), ids.end());
+
+      tb::Random::Bag<word_type> rnd_ops;
+      rnd_ops.add(OP_CLEAR);
+      rnd_ops.add(OP_ADD);
+      rnd_ops.add(OP_DELETE);
+      rnd_ops.add(OP_REPLACE);
+      rnd_ops.finalize();
+
+      // Construct stimulus
+      std::vector<Update> upts;
+      for (std::size_t i = 0; i < 1024; i++) {
+        Update upt;
+        upt.id = rnd_id();
+        upt.op = rnd_ops();
+        upt.size = rnd_size();
+        upt.key = rnd_key();
+        upts.push_back(upt);
+      }
+      
+      // Apply stimulus
+      for (const Update & u : upts) {
+        top_.t_update_issue(u);
+        Notify notify;
+        // TODO: need to rethink this.
+        const bool error{m_.apply(u, notify)};
+        //        if (error)
+          notifies_.push_back(notify);
+      }
     }
     void t_query(const std::vector<word_type> & ids) {
+      tb::Random::UniformRandomInterval<word_type> level{3,0};
+      tb::Random::Bag<word_type> bg;
+      bg.add(ids.begin(), ids.end());
+      
+      // Construct stimulus
+      std::vector<QueryCommand> qrys;
+      for (std::size_t i = 0; i < 1024; i++)
+        qrys.push_back(QueryCommand{bg(), level()});
+
+      // Apply stimulus
+      for (const QueryCommand & cmd : qrys) {
+        top_.t_query_issue(cmd);
+        query_responses_.push_back(m_.apply(cmd));
+      }
+    }
+    void t_consume_notifies() {
+      const Notify rtl{top_.t_notify()};
+      const Notify tb{notifies_.front()};
+      ASSERT_EQ(rtl, tb);
+      notifies_.pop_front();
+    }
+    void t_consume_query_responses() {
+      const QueryResponse rtl{top_.t_query_response()};
+      const QueryResponse tb{query_responses_.front()};
+      ASSERT_EQ(rtl, tb);
+      query_responses_.pop_front();
+    }
+    void t_consume_update_responses() {
+      const UpdateResponse rtl{top_.t_update_response()};
+      const UpdateResponse tb{update_responses_.front()};
+      ASSERT_EQ(rtl, tb);
+      update_responses_.pop_front();
     }
     std::deque<Notify> notifies_;
     std::deque<QueryResponse> query_responses_;
-    std::deque<UpdateResponse> update_respones_;
+    std::deque<UpdateResponse> update_responses_;
     MachineModel m_;
     TOP & top_;
   };
