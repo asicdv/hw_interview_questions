@@ -306,7 +306,6 @@ class MachineModel {
   };
  public:
   MachineModel() {}
-
   bool apply(const Update & update, Notify & notify) {
     bool error;
     switch (update.op) {
@@ -332,10 +331,8 @@ class MachineModel {
     }
     return error;
   }
-
   QueryResponse apply(const QueryCommand & query) {
     QueryResponse resp;
-
     auto it{s_.find(query.id)};
     if (it != s_.end()) {
       Entry & e{s_[query.id]};
@@ -352,7 +349,6 @@ class MachineModel {
     }
     return resp;
   }
-
  private:
   std::map<word_type, Entry> s_;
 };
@@ -414,7 +410,6 @@ TEST(SortedListsTest, Basic) {
 
         wait(done_update_driver_ & done_query_driver_);
       }
-
       finish();
     }
    private:
@@ -437,8 +432,7 @@ TEST(SortedListsTest, Basic) {
     void update(const std::vector<word_type> & ids) {
       tb::Random::UniformRandomInterval<word_type> rnd_size;
       tb::Random::UniformRandomInterval<long_type> rnd_key;
-      tb::Random::Bag<word_type> rnd_id;
-      rnd_id.add(ids.begin(), ids.end());
+      tb::Random::Bag<word_type> rnd_id{ids.begin(), ids.end()};
 
       tb::Random::Bag<word_type> rnd_ops;
       rnd_ops.add(OP_CLEAR);

@@ -98,6 +98,8 @@ struct Random {
   template<typename T>
   struct Bag {
     explicit Bag() {};
+    template<typename FwdIt>
+    Bag(FwdIt begin, FwdIt end) { add(begin, end); }
     void add(const T & t, std::size_t weight = 1, bool do_finalize = true) {
       while (weight--)
         v_.push_back(t);
