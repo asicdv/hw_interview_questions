@@ -46,19 +46,19 @@ module multi_ported_flop_lvt_3r3w (
 
    //
    , input                                   ren0
-   , input        [9:0]                      raddr0
+   , input        [11:0]                     raddr0
    //
    , output logic [31:0]                     rdata0
    
    //
    , input                                   ren1
-   , input     [9:0]                         raddr1
+   , input        [11:0]                     raddr1
    //
    , output logic [31:0]                     rdata1
    
    //   
    , input                                   ren2
-   , input     [9:0]                         raddr2
+   , input        [11:0]                     raddr2
    //
    , output logic [31:0]                     rdata2
 
@@ -70,15 +70,15 @@ module multi_ported_flop_lvt_3r3w (
 
    //
    , input                                   wen0
-   , input        [9:0]                      waddr0
+   , input        [11:0]                     waddr0
    , input        [31:0]                     wdata0
    //
    , input                                   wen1
-   , input        [9:0]                      waddr1
+   , input        [11:0]                     waddr1
    , input        [31:0]                     wdata1
    //
    , input                                   wen2
-   , input        [9:0]                      waddr2
+   , input        [11:0]                     waddr2
    , input        [31:0]                     wdata2
 
    //======================================================================== //
@@ -102,7 +102,7 @@ module multi_ported_flop_lvt_3r3w (
   // Generic SRAM-/Flop-based multiported memory structure. RTL located
   // in: contrib/libv2/sv/memory/multi_ported_sram.sv
   //
-  multi_ported_sram #(.NUM_W(3), .NUM_R(3), .W(32), .N(1024)) u_mem (
+  multi_ported_sram #(.NUM_W(3), .NUM_R(3), .W(32), .N(1024 * 3)) u_mem (
     //
       .clk               (clk                          )
     , .rst               (rst                          )

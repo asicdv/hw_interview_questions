@@ -25,5 +25,11 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-emit_answer(tb_multi_ported_flop_lvt_3r3w
-  multi_ported_flop_lvt_3r3w.sv multi_ported_flop_lvt_3r3w.cpp)
+emit_solution(
+  TARGET
+  tb_multi_ported_flop_lvt_3r3w
+  VTOP
+  multi_ported_flop_lvt_3r3w.sv
+  TB
+  multi_ported_flop_lvt_3r3w.cpp
+  )

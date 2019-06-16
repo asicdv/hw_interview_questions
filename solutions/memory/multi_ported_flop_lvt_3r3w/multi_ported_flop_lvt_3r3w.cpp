@@ -1,5 +1,5 @@
 //========================================================================== //
-// Copyright (c) 2016, Stephen Henry
+// Copyright (c) 2016-17, Stephen Henry
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -25,258 +25,267 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-#include <libtb2.hpp>
-#include <vector>
-#include <list>
-#include <algorithm>
-#include <map>
 
+#include "libtb/libtb.hpp"
+#include "libtb/verilator.hpp"
+#include <gtest/gtest.h>
+#include <vector>
+#include <sstream>
+#include <utility>
+#include <memory>
 #include "vobj/Vmulti_ported_flop_lvt_3r3w.h"
+
+using word_type = uint32_t;
 
 #define PORTS(__func)                           \
   __func(ren0, bool)                            \
-  __func(raddr0, addr_t)                        \
-  __func(rdata0, data_t)                        \
+  __func(raddr0, word_type)                     \
+  __func(rdata0, word_type)                     \
   __func(ren1, bool)                            \
-  __func(raddr1, addr_t)                        \
-  __func(rdata1, data_t)                        \
+  __func(raddr1, word_type)                     \
+  __func(rdata1, word_type)                     \
   __func(ren2, bool)                            \
-  __func(raddr2, addr_t)                        \
-  __func(rdata2, data_t)                        \
+  __func(raddr2, word_type)                     \
+  __func(rdata2, word_type)                     \
   __func(wen0, bool)                            \
-  __func(waddr0, addr_t)                        \
-  __func(wdata0, data_t)                        \
+  __func(waddr0, word_type)                     \
+  __func(wdata0, word_type)                     \
   __func(wen1, bool)                            \
-  __func(waddr1, addr_t)                        \
-  __func(wdata1, data_t)                        \
+  __func(waddr1, word_type)                     \
+  __func(wdata1, word_type)                     \
   __func(wen2, bool)                            \
-  __func(waddr2, addr_t)                        \
-  __func(wdata2, data_t)                        \
+  __func(waddr2, word_type)                     \
+  __func(wdata2, word_type)                     \
   __func(init, bool)                            \
   __func(busy_w, bool)
 
-using uut_t = Vmulti_ported_flop_lvt_3r3w;
-using addr_t = uint32_t;
-using data_t = uint32_t;
-
-namespace opts {
-  static const int N = 1024;
-}
-
-struct WriterAndReader : sc_core::sc_module {
-  //
-  sc_core::sc_in<bool> clk;
-
-  //
-  sc_core::sc_out<bool> wen;
-  sc_core::sc_out<addr_t> waddr;
-  sc_core::sc_out<data_t> wdata;
-
-  //
-  sc_core::sc_out<bool> re;
-  sc_core::sc_out<addr_t> raddr;
-  sc_core::sc_in<data_t> rdata;
-
-  SC_HAS_PROCESS(WriterAndReader);
-  WriterAndReader(sc_core::sc_module_name mn = "war", int N = 1000)
-    : N_(N), enable_(false) {
-    SC_THREAD(t_main);
+struct TOP : tb::Top {
+  TOP() {
+    v.rst(rst);
+    v.clk(clk);
+#define __bind_signals(__name, __type)          \
+    v.__name(__name);
+    PORTS(__bind_signals)
+#undef __bind_signals
+    start_tracing();
   }
-  void start_of_simulation() {
-    LOGGER(INFO) << "Xactor starts with addr count = "
-                 << addrs_.size() << "\n";
+  ~TOP() {
+    stop_tracing();
   }
-  void push_back(addr_t a) { addrs_.push_back(a); }
-  void set_enable(bool enable = true) { enable_ = enable; }
-private:
-  void t_main() {
-    if (!enable_)
-      return ;
-    
-    wait(100, SC_NS);
-    wait(clk.posedge_event());
-    
-    // Generate initial state
-    scv_smart_ptr<data_t> d;
-    for (std::size_t i = 0; i < addrs_.size(); i++) {
-      t_write(addrs_[i], *d);
-      d->next();
-    }
-
-    scv_smart_ptr<bool> rnw_c;
-    struct addrs_constraint : scv_constraint_base {
-      scv_smart_ptr<int> d;
-      SCV_CONSTRAINT_CTOR(addrs_constraint) {
-        SCV_CONSTRAINT((d()>=0) && (d() < 1024));
-      }
-    } addrs_constraint_c("addrs_constraint_c");
-
-    int i;
-    while (N_--) {
-      rnw_c->next();
-
-      do {
-        i = *addrs_constraint_c.d;
-        addrs_constraint_c.next();
-      } while (i >= addrs_.size());
-
-      const bool rnw = *rnw_c;
-      const addr_t a = addrs_[i];
-      if (rnw) {
-        const data_t data = t_read(a);
-        if (mem_[a] != data) {
-          LOGGER(ERROR) << "Mismatch on read. "
-                        << " Expected: 0x" << std::hex << mem_[a]
-                        << " Actual: 0x" << data
-                        << "\n";
-        }
-      } else {
-          t_write(a, *d);
-          d->next();
-      }
+  void idle_wr(std::size_t i) {
+    switch (i) {
+      case 0:
+        wen0 = false;
+        waddr0 = word_type{};
+        wdata0 = word_type{};
+        break;
+      case 1:
+        wen1 = false;
+        waddr1 = word_type{};
+        wdata1 = word_type{};
+        break;
+      case 2:
+        wen2 = false;
+        waddr2 = word_type{};
+        wdata2 = word_type{};
+        break;
     }
   }
-  void t_write_idle() {
-    wen = false;
-    waddr = 0;
-    wdata = 0;
-  }
-  void t_write(addr_t a, data_t d) {
-    wen = true;
-    waddr = a;
-    wdata = d;
-    wait(clk.posedge_event());
-    mem_[a] = d;
-    t_write_idle();
-  }
-  void t_read_idle() {
-    re = false;
-    raddr = 0;
-  }
-  data_t t_read(addr_t a) {
-    re = true;
-    raddr = a;
-    wait(clk.posedge_event());
-    wait(1, SC_PS);
-    t_read_idle();
-    return rdata;
-  }
-  std::vector<addr_t> addrs_;
-  std::map<addr_t, data_t> mem_;
-  int N_;
-  bool enable_;
-};
-
-struct Tb : libtb2::Top<uut_t> {
-  SC_HAS_PROCESS(Tb);
-  Tb(sc_core::sc_module_name mn = "t")
-    : uut_("uut")
-#define __declare_ports(__name, __type)         \
-      , __name ## _(#__name)
-      PORTS(__declare_ports)
-#undef __declare_ports
-  {
-    resetter_.clk(clk_);
-    resetter_.rst(rst_);
-    //
-    uut_.clk(clk_);
-    uut_.rst(rst_);
-#define __bind_ports(__name, __type)            \
-    uut_.__name(__name ## _);
-    PORTS(__bind_ports)
-#undef __bind_ports
-    wd_.clk(clk_);
-
-    //
-    war_[0].clk(clk_);
-    //
-    war_[0].wen(wen0_);
-    war_[0].waddr(waddr0_);
-    war_[0].wdata(wdata0_);
-    //
-    war_[0].re(ren0_);
-    war_[0].raddr(raddr0_);
-    war_[0].rdata(rdata0_);
-
-    //
-    war_[1].clk(clk_);
-    //
-    war_[1].wen(wen1_);
-    war_[1].waddr(waddr1_);
-    war_[1].wdata(wdata1_);
-    //
-    war_[1].re(ren1_);
-    war_[1].raddr(raddr1_);
-    war_[1].rdata(rdata1_);
-
-    //
-    war_[2].clk(clk_);
-    //
-    war_[2].wen(wen2_);
-    war_[2].waddr(waddr2_);
-    war_[2].wdata(wdata2_);
-    //
-    war_[2].re(ren2_);
-    war_[2].raddr(raddr2_);
-    war_[2].rdata(rdata2_);
-
-    war_[0].set_enable();
-    war_[1].set_enable();
-    war_[2].set_enable();
-
-    load_stimulus();
-    LOGGER(INFO) << "Stimulus loaded!\n";
-    
-    register_uut(uut_);
-    vcd_on();
-  }
-private:
-  void load_stimulus() {
-    struct addrs_constraint : scv_constraint_base {
-      scv_smart_ptr<std::size_t> d;
-      SCV_CONSTRAINT_CTOR(addrs_constraint) {
-        SCV_CONSTRAINT((d()>=0) && (d() < opts::N));
-      }
-    } addrs_constraint_c("addrs_constraint_c");
-    struct ports_constraint : scv_constraint_base {
-      scv_smart_ptr<std::size_t> d;
-      SCV_CONSTRAINT_CTOR(ports_constraint) {
-        SCV_CONSTRAINT((d()>=0) && (d() < 3));
-      }
-    } ports_constraint_c("ports_constraint_c");
-
-    std::list<addr_t> addrs;
-    for (addr_t a = 0; a < opts::N; a++) {
-      addrs.push_back(a);
+  void idle_rd(std::size_t i) {
+    switch (i) {
+      case 0:
+        ren0 = false;
+        raddr0 = word_type{};
+        break;
+      case 1:
+        ren1 = false;
+        raddr1 = word_type{};
+        break;
+      case 2:
+        ren2 = false;
+        raddr2 = word_type{};
+        break;
     }
-    while (addrs.size() != 0ull) {
-      ports_constraint_c.next();
+  }
+  word_type t_set_read(std::size_t i, word_type addr) {
+    word_type ret;
+    switch (i) {
+      case 0:
+        ren0 = true;
+        raddr0 = addr;
+        t_await_cycles(1);
+        ret = rdata0;
+        break;
+      case 1:
+        ren1 = true;
+        raddr1 = addr;
+        t_await_cycles(1);
+        ret = rdata1;
+        break;
+      case 2:
+        ren2 = true;
+        raddr2 = addr;
+        t_await_cycles(1);
+        ret = rdata2;
+        break;
+    }
+    return ret;
+  }
+  void t_set_write(std::size_t i, word_type addr, word_type data) {
+    switch (i) {
+      case 0:
+        wen0 = true;
+        waddr0 = addr;
+        wdata0 = data;
+        break;
+      case 1:
+        wen1 = true;
+        waddr1 = addr;
+        wdata1 = data;
+        break;
+      case 2:
+        wen2 = true;
+        waddr2 = addr;
+        wdata2 = data;
+        break;
+    }
+  }
+  void t_apply_init() {
+    init = true;
+    t_await_cycles(1);
+    init = false;
+    while (busy_w)
+      t_await_cycles(1);
       
-      std::size_t pos = opts::N + 1;
-      while ((pos = *addrs_constraint_c.d) >= addrs.size()) {
-        addrs_constraint_c.next();
-      }
-      std::list<addr_t>::iterator it = addrs.begin();
-      std::advance(it, pos);
-
-      war_[*ports_constraint_c.d].push_back(*it);
-      addrs.erase(it);
-    }
   }
-  sc_core::sc_clock clk_;
-  sc_core::sc_signal<bool> rst_;
+  void t_apply_reset() {
+    rst = true;
+    t_await_cycles(2);
+    rst = false;
+    t_await_cycles(2);
+  }
+  void t_await_cycles(std::size_t n = 1) {
+    while (n--)
+      wait(clk.negedge_event());
+  }
+  Vmulti_ported_flop_lvt_3r3w v{"multi_ported_flop_lvt_3r3w"};
+  ::sc_core::sc_signal<bool> rst{"rst"};
+  ::sc_core::sc_clock clk{"clk"};
 #define __declare_signal(__name, __type)        \
-  sc_core::sc_signal<__type> __name##_;
+  ::sc_core::sc_signal<__type> __name{#__name};
   PORTS(__declare_signal)
 #undef __declare_signal
-  uut_t uut_;
-  WriterAndReader war_[3];
-  libtb2::SimWatchDogCycles wd_;
-  libtb2::Resetter resetter_;
+ private:
+  void start_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    Verilated::traceEverOn(true);
+    vcd_ = std::make_unique<VerilatedVcdSc>();
+    v.trace(vcd_.get(), 99);
+    vcd_->open("sim.vcd");
+#endif
+  }
+  void stop_tracing() {
+#ifdef OPT_ENABLE_TRACE
+    vcd_->close();
+#endif
+  }
+#ifdef OPT_ENABLE_TRACE
+  std::unique_ptr<VerilatedVcdSc> vcd_;
+#endif
 };
-SC_MODULE_EXPORT(Tb);
 
-int sc_main(int argc, char **argv) {
-  Tb tb;
-  return libtb2::Sim::start(argc, argv);
+namespace {
+
+TOP top;
+tb::TaskRunner TaskRunner;
+
+} // namespace
+
+TEST(MemTest, Basic) {
+  const std::size_t n{1024 << 6};
+
+  struct WriteCommand {
+    word_type addr, data;
+  };
+  struct MemTask : tb::Task {
+    MemTask(TOP & top, std::size_t rd_n = 3, std::size_t wr_n = 3)
+        : top_(top), rd_n_(rd_n), wr_n_(wr_n) {}
+    void add_write_stimulus(std::size_t i, const WriteCommand & cmd) {
+      stimulus_[i].push_back(cmd);
+    }
+    void execute() override {
+      using namespace sc_core;
+
+      top_.t_apply_reset();
+      top_.t_apply_init();
+
+      std::vector<::sc_core::sc_process_handle> h;
+      for (std::size_t i = 0; i < rd_n_; i++) {
+        std::stringstream ss{"t_read"}; ss << i;
+        const std::string s{ss.str()};
+        h.push_back(sc_spawn(std::bind(&MemTask::t_read, this, i), s.c_str()));
+      }
+
+      for (std::size_t i = 0; i < wr_n_; i++) {
+        std::stringstream ss{"t_write"}; ss << i;
+        const std::string s{ss.str()};
+        h.push_back(sc_spawn(std::bind(&MemTask::t_write, this, i), s.c_str()));
+      }
+      t_join(h);
+      finish();
+    }
+   private:
+    void t_write(std::size_t i) {
+      tb::Random::UniformRandomInterval<word_type> dly{4};
+      for (const WriteCommand & cmd : stimulus_[i]) {
+        top_.t_set_write(i, cmd.addr, cmd.data);
+        top_.t_await_cycles(1);
+        top_.idle_wr(i);
+        top_.t_await_cycles(dly());
+        mem_[cmd.addr] = cmd.data;
+      }
+      writes_done_[i].notify();
+    }
+    void t_read(std::size_t i) {
+      wait(writes_done_[i]);
+      tb::Random::UniformRandomInterval<word_type> dly{4};
+
+      const std::size_t lo = 1024 * i;
+      const std::size_t hi = 1024 * (i + 1);
+      for (std::size_t word = lo; word < hi; word++) {
+        const word_type rdata_rtl{top_.t_set_read(i, word)};
+        const word_type rdata_tb{mem_[word]};
+        ASSERT_EQ(rdata_rtl, rdata_tb);
+      }
+    }
+    void t_join(std::vector<::sc_core::sc_process_handle> & v) {
+      ::sc_core::sc_event_and_list e;
+      for (::sc_core::sc_process_handle h : v)
+        e &= h.terminated_event();
+      wait(e);
+    }
+    std::map<word_type, word_type> mem_;
+    ::sc_core::sc_event writes_done_[3];
+    std::vector<WriteCommand> stimulus_[3];
+    std::size_t rd_n_, wr_n_;
+    TOP & top_;
+  };
+  
+  auto task = std::make_unique<MemTask>(top);
+
+  tb::Random::UniformRandomInterval<word_type> data{};
+  for (std::size_t wr = 0; wr < 3; wr++) {
+    tb::Random::UniformRandomInterval<word_type> addr(1024 * (wr + 1), 1024 * wr);
+    
+    for (std::size_t i = 0; i < n; i++)
+      task->add_write_stimulus(wr, WriteCommand{addr(), data()});
+  }
+  TaskRunner.set_task(std::move(task));
+  TaskRunner.run_until_exhausted(true);
+}
+
+int sc_main(int argc, char ** argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  ::tb::initialize(argc, argv);
+  return RUN_ALL_TESTS();
 }
