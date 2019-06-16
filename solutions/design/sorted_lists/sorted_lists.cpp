@@ -87,6 +87,10 @@ struct UpdateResponse {
       return false;
     return true;
   }
+  friend std::ostream & operator<<(std::ostream & os, const UpdateResponse & ur) {
+    return os << " vld:" << ur.vld
+              << " id:" << ur.id;
+  }
   
   bool vld{false};
   word_type id;
@@ -113,6 +117,14 @@ struct QueryResponse {
 
     return true;
   }
+  friend std::ostream& operator<<(std::ostream & os, const QueryResponse & qr) {
+    return os << " vld:" << qr.vld
+              << " size:" << qr.size
+              << " listsize:" << qr.listsize
+              << " id:" << qr.id
+              << " key:" << qr.key
+              << " error:" << qr.error;
+  }
   
   bool vld{false};
   word_type size, listsize, id;
@@ -132,6 +144,12 @@ struct Notify {
       return false;
 
     return true;
+  }
+  friend std::ostream& operator<<(std::ostream & os, const Notify & n) {
+    return os << " vld:" << n.vld
+              << " id:" << n.id
+              << " size:" << n.size
+              << " key:" << n.key;
   }
   
   bool vld{false};
@@ -243,8 +261,7 @@ class MachineModel {
   struct KV { long_type key; word_type size; };
   class Entry {
    public:
-    Entry() {}
-
+    Entry() = default;
     bool query(long_type key, KV & kv) const {
       auto it = std::find_if(keys.begin(), keys.end(),
                              [&](const KV & i) { return i.key == key; });
@@ -266,27 +283,22 @@ class MachineModel {
       const bool error{keys.size() == 4};
       if (!error)
         keys.push_back(kv);
-
       return error;
     }
     std::tuple<bool, bool> del(word_type key) {
       auto it = std::remove_if(keys.begin(), keys.end(),
                             [&](const KV & kv) { return kv.key == key; });
-
       const bool did_replace{it != keys.end()};
       if (did_replace)
         keys.erase(it, keys.end());
-
       return {keys.empty(), !did_replace};
     }
     bool replace(const KV & kv) {
       auto it = std::find_if(keys.begin(), keys.end(),
                              [&](const KV & b) { return kv.key == b.key; });
-
       const bool did_replace{it != keys.end()};
       if (did_replace)
         *it = kv;
-
       return !did_replace;
     }
    private:
@@ -351,8 +363,6 @@ TEST(SortedListsTest, Basic) {
     void execute() override {
       using namespace sc_core;
 
-      top_.t_apply_reset();
-
       // Spawn global thread to consume outbound notifies.
       //
       auto ph0{
@@ -368,47 +378,63 @@ TEST(SortedListsTest, Basic) {
       auto ph2{
         sc_spawn(std::bind(&SortedListsTask::t_consume_update_responses, this),
                  "t_consumes_update_responses")};
+      // Spawn global thread to consume update responses.
+      //
+      auto ph3{
+        sc_spawn(std::bind(&SortedListsTask::t_update_driver, this),
+                 "t_update_driver")};
+      // Spawn global thread to consume update responses.
+      //
+      auto ph4{
+        sc_spawn(std::bind(&SortedListsTask::t_query_driver, this),
+                 "t_query_driver")};
       
+      top_.t_apply_reset();
 
       // Perform N update, query rounds where the active set of ID are
       // continuously swapped as per spec. requirements.
       //
+      std::stringstream ss;
       tb::Random::UniformRandomInterval<word_type> dly{63};
       for (std::size_t round = 0; round < 16; round++) {
-        std::vector<::sc_core::sc_process_handle> ph;
-
         // Compute the update set.
-        //
         std::vector<word_type> ids_update;
         for (std::size_t i = 0; i < 8; i++)
           ids_update.push_back(dly());
+        update(ids_update);
 
-        // Spawn thread to drive updates
-        //
-        ph.push_back(sc_spawn(std::bind(&SortedListsTask::t_update, this, ids_update),
-                              "t_update"));
-
-        // Compute the active set (disjoint from active set).
-        //
+        // Compute active set
         std::vector<word_type> ids_active;
         while (ids_active.size() != 24) {
           const word_type id{dly()};
-          if (std::find(ids_active.begin(), ids_active.end(), id) != ids_active.end())
+          if (std::find(ids_active.begin(), ids_active.end(), id) == ids_active.end())
             ids_active.push_back(id);
         }
+        query(ids_active);
 
-        // Spawn thread to drive queries.
-        //
-        ph.push_back(sc_spawn(std::bind(&SortedListsTask::t_query, this, ids_active),
-                              "t_query"));
-
-        // Join on threads before proceeding to next round.
-        //
-        t_join_handles(ph);
+        wait(done_update_driver_ & done_query_driver_);
       }
+
+      finish();
     }
    private:
-    void t_update(const std::vector<word_type> & ids) {
+    void t_update_driver() {
+      while (true) {
+        wait(post_update_driver_);
+
+        // Apply stimulus
+        for (const Update & u : updates_) {
+          top_.t_update_issue(u);
+          Notify notify;
+          // TODO: need to rethink this.
+          const bool error{m_.apply(u, notify)};
+          //        if (error)
+          notifies_.push_back(notify);
+        }
+        done_update_driver_.notify();
+      }
+    }
+    void update(const std::vector<word_type> & ids) {
       tb::Random::UniformRandomInterval<word_type> rnd_size;
       tb::Random::UniformRandomInterval<long_type> rnd_key;
       tb::Random::Bag<word_type> rnd_id;
@@ -422,63 +448,71 @@ TEST(SortedListsTest, Basic) {
       rnd_ops.finalize();
 
       // Construct stimulus
-      std::vector<Update> upts;
+      updates_.clear();
       for (std::size_t i = 0; i < 1024; i++) {
         Update upt;
         upt.id = rnd_id();
         upt.op = rnd_ops();
         upt.size = rnd_size();
         upt.key = rnd_key();
-        upts.push_back(upt);
+        updates_.push_back(upt);
       }
-      
-      // Apply stimulus
-      for (const Update & u : upts) {
-        top_.t_update_issue(u);
-        Notify notify;
-        // TODO: need to rethink this.
-        const bool error{m_.apply(u, notify)};
-        //        if (error)
-          notifies_.push_back(notify);
+      post_update_driver_.notify();
+    }
+    void t_query_driver() {
+      while (true) {
+        wait(post_query_driver_);
+        
+        // Apply stimulus
+        for (const QueryCommand & cmd : queries_) {
+          top_.t_query_issue(cmd);
+          query_responses_.push_back(m_.apply(cmd));
+        }
+        done_query_driver_.notify();
       }
     }
-    void t_query(const std::vector<word_type> & ids) {
+    void query(const std::vector<word_type> & ids) {
       tb::Random::UniformRandomInterval<word_type> level{3,0};
       tb::Random::Bag<word_type> bg;
       bg.add(ids.begin(), ids.end());
       
       // Construct stimulus
-      std::vector<QueryCommand> qrys;
+      queries_.clear();
       for (std::size_t i = 0; i < 1024; i++)
-        qrys.push_back(QueryCommand{bg(), level()});
+        queries_.push_back(QueryCommand{bg(), level()});
 
-      // Apply stimulus
-      for (const QueryCommand & cmd : qrys) {
-        top_.t_query_issue(cmd);
-        query_responses_.push_back(m_.apply(cmd));
-      }
+      post_query_driver_.notify();
     }
     void t_consume_notifies() {
       const Notify rtl{top_.t_notify()};
+      ASSERT_FALSE(notifies_.empty());
       const Notify tb{notifies_.front()};
-      ASSERT_EQ(rtl, tb);
+      ASSERT_EQ(rtl, tb) << sc_core::sc_time_stamp();
       notifies_.pop_front();
     }
     void t_consume_query_responses() {
       const QueryResponse rtl{top_.t_query_response()};
+      ASSERT_FALSE(query_responses_.empty());
       const QueryResponse tb{query_responses_.front()};
-      ASSERT_EQ(rtl, tb);
+      ASSERT_EQ(rtl, tb) << sc_core::sc_time_stamp();
       query_responses_.pop_front();
     }
     void t_consume_update_responses() {
       const UpdateResponse rtl{top_.t_update_response()};
+      ASSERT_FALSE(update_responses_.empty());
       const UpdateResponse tb{update_responses_.front()};
-      ASSERT_EQ(rtl, tb);
+      ASSERT_EQ(rtl, tb) << sc_core::sc_time_stamp();
       update_responses_.pop_front();
     }
+    std::vector<Update> updates_;
+    std::vector<QueryCommand> queries_;
     std::deque<Notify> notifies_;
     std::deque<QueryResponse> query_responses_;
     std::deque<UpdateResponse> update_responses_;
+    sc_core::sc_event post_update_driver_;
+    sc_core::sc_event post_query_driver_;
+    sc_core::sc_event done_update_driver_;
+    sc_core::sc_event done_query_driver_;
     MachineModel m_;
     TOP & top_;
   };

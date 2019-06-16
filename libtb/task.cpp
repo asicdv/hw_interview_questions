@@ -30,6 +30,8 @@
 namespace tb {
 
 void Task::t_join_handles(std::vector<::sc_core::sc_process_handle> & hs) {
+  if (hs.empty()) return;
+
   ::sc_core::sc_event_and_list e;
   for (::sc_core::sc_process_handle h : hs)
     e &= h.terminated_event();
