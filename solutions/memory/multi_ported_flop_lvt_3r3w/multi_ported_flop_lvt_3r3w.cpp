@@ -236,6 +236,7 @@ TEST(MemTest, Basic) {
     }
    private:
     void t_write(std::size_t i) {
+      top_.idle_wr(i);
       tb::Random::UniformRandomInterval<word_type> dly{4};
       for (const WriteCommand & cmd : stimulus_[i]) {
         top_.t_set_write(i, cmd.addr, cmd.data);
@@ -245,8 +246,10 @@ TEST(MemTest, Basic) {
         mem_[cmd.addr] = cmd.data;
       }
       writes_done_[i].notify();
+      top_.idle_wr(i);
     }
     void t_read(std::size_t i) {
+      top_.idle_rd(i);
       wait(writes_done_[i]);
       tb::Random::UniformRandomInterval<word_type> dly{4};
 
@@ -257,6 +260,7 @@ TEST(MemTest, Basic) {
         const word_type rdata_tb{mem_[word]};
         ASSERT_EQ(rdata_rtl, rdata_tb);
       }
+      top_.idle_rd(i);
     }
     void t_join(std::vector<::sc_core::sc_process_handle> & v) {
       ::sc_core::sc_event_and_list e;
@@ -271,12 +275,12 @@ TEST(MemTest, Basic) {
     TOP & top_;
   };
   
-p  auto task = std::make_unique<MemTask>(top);
-
+  auto task = std::make_unique<MemTask>(top);
   tb::Random::UniformRandomInterval<word_type> data{};
   for (std::size_t wr = 0; wr < 3; wr++) {
-    tb::Random::UniformRandomInterval<word_type> addr(1024 * (wr + 1), 1024 * wr);
-    
+    const word_type lo = 1024 * wr;
+    const word_type hi = 1024 * (wr + 1) - 1;
+    tb::Random::UniformRandomInterval<word_type> addr{hi, lo};
     for (std::size_t i = 0; i < n; i++)
       task->add_write_stimulus(wr, WriteCommand{addr(), data()});
   }
