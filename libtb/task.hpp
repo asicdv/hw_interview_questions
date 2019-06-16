@@ -43,6 +43,8 @@ struct Task {
   virtual bool is_completed() const { return false; }
   virtual void execute() = 0;
   virtual void finish() { finish_ = true; }
+ protected:
+  virtual void t_join_handles(std::vector<::sc_core::sc_process_handle> & hs);
  private:
   bool finish_{false};
 };

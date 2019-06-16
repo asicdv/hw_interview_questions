@@ -29,6 +29,13 @@
 
 namespace tb {
 
+void Task::t_join_handles(std::vector<::sc_core::sc_process_handle> & hs) {
+  ::sc_core::sc_event_and_list e;
+  for (::sc_core::sc_process_handle h : hs)
+    e &= h.terminated_event();
+  wait(e);
+}
+  
 TaskRunner::TaskRunner() :
     ::sc_core::sc_module{::sc_core::sc_module_name{"TaskRunner"}} {
   SC_THREAD(t_stimulus);

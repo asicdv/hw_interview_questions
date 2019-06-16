@@ -66,7 +66,8 @@ struct Update {
   long_type key;
 };
 
-struct UpdateError {
+struct UpdateResponse {
+  bool vld{false};
   word_type id;
 };
 
@@ -75,12 +76,14 @@ struct QueryCommand {
 };
 
 struct QueryResponse {
+  bool vld{false};
   word_type size, listsize, id;
   long_type key;
   bool error;
 };
 
 struct Notify {
+  bool vld{false};
   word_type id, size;
   long_type key;
 };
@@ -112,10 +115,10 @@ struct TOP : tb::Top {
     t_await_cycles(1);
     update_idle();
   }
-  UpdateError t_update_error() {
+  UpdateResponse t_update_reponse() {
     while (!upt_error_vld_r)
       t_await_cycles();
-    return UpdateError{upt_error_id_r};
+    return UpdateResponse{true, upt_error_id_r};
   }
   void query_idle() {
     qry_vld = false;
@@ -131,13 +134,14 @@ struct TOP : tb::Top {
     while (!qry_resp_vld_r)
       t_await_cycles();
 
-    return QueryResponse{qry_size_r, qry_listsize_r, qry_id_r, qry_key_r, qry_error_r};
+    return QueryResponse{true, qry_size_r, qry_listsize_r,
+        qry_id_r, qry_key_r, qry_error_r};
   }
   Notify t_notify() {
     while (!ntf_vld_r)
       t_await_cycles();
 
-    return Notify{ntf_id_r, ntf_size_r, ntf_key_r};
+    return Notify{true, ntf_id_r, ntf_size_r, ntf_key_r};
   }
   void t_apply_reset() {
     rst = true;
@@ -183,18 +187,47 @@ tb::TaskRunner TaskRunner;
 } // namespace
 
 class MachineModel {
-  struct KV { long_type key; word_type value; };
+  struct KV { long_type key; word_type size; };
   class Entry {
    public:
     Entry() {}
 
-    void clear() {
+    bool is_valid(const Update & u) {
+      return false;
+    }
+    bool is_valid(const QueryCommand & c) {
+      return false;
+    }
+    template<typename FwdIt>
+    void set_disable_ids(FwdIt begin, FwdIt end) {
+      disabled_ids_.clear();
+      std::copy(begin, end, std::back_inserter(disabled_ids_));
+    }
+    bool query(long_type key, KV & kv) const {
+      auto it = std::find_if(keys.begin(), keys.end(),
+                             [&](const KV & i) { return i.key == key; });
+      const bool found{it != keys.end()};
+      if (found)
+        kv = *it;
+      return !found;
+    }
+    std::size_t listsize() const { return keys.size(); }
+    void sort() {
+      std::sort(keys.begin(), keys.end(),
+                [](const KV & a, const KV & b) { return a.key < b.key; });
+    }
+    bool clear() {
       keys.clear();
+      return false;
     }
-    void add(const KV & kv) {
-      keys.push_back(kv);
+    bool add(const KV & kv) {
+      const bool error{keys.size() == 4};
+      if (!error)
+        keys.push_back(kv);
+
+      return error;
     }
-    bool del(word_type key, Notify & notify) {
+    std::tuple<bool, bool> del(word_type key) {
       auto it = std::remove_if(keys.begin(), keys.end(),
                             [&](const KV & kv) { return kv.key == key; });
 
@@ -202,8 +235,7 @@ class MachineModel {
       if (did_replace)
         keys.erase(it, keys.end());
 
-      
-      return did_replace;
+      return {keys.empty(), !did_replace};
     }
     bool replace(const KV & kv) {
       auto it = std::find_if(keys.begin(), keys.end(),
@@ -212,36 +244,59 @@ class MachineModel {
       const bool did_replace{it != keys.end()};
       if (did_replace)
         *it = kv;
-      return did_replace;
+
+      return !did_replace;
     }
    private:
     std::vector<KV> keys;
+    std::vector<word_type> disabled_ids_;
   };
  public:
   MachineModel() {}
 
   bool apply(const Update & update, Notify & notify) {
-    bool ret{false};
+    bool error;
     switch (update.op) {
       case OP_CLEAR:
-        s_[update.id].clear();
+        error = s_[update.id].clear();
+        if (error)
+          notify = Notify{true, update.id, update.size, update.key};
         break;
       case OP_ADD:
-        s_[update.id].add(KV{update.key, update.size});
+        error = s_[update.id].add(KV{update.key, update.size});
         break;
-      case OP_DELETE:
-        ret = s_[update.id].del(update.key, notify));
-        break;
+      case OP_DELETE: {
+        auto res{s_[update.id].del(update.key)};
+        error = std::get<0>(res);
+        notify.vld = std::get<1>(res);
+        notify.id = update.id;
+        notify.size = update.size;
+        notify.key = update.key;
+      } break;
       case OP_REPLACE:
-        EXPECT_TRUE(s_[update.id].replace(KV{update.key, update.size}));
+        error = s_[update.id].replace(KV{update.key, update.size});
         break;
     }
-    return ret;
+    return error;
   }
 
   QueryResponse apply(const QueryCommand & query) {
     QueryResponse resp;
 
+    auto it{s_.find(query.id)};
+    if (it != s_.end()) {
+      Entry & e{s_[query.id]};
+      e.sort();
+      resp.vld = true;
+      KV kv;
+      resp.error = e.query(query.level, kv);
+      if (!resp.error) {
+        resp.key = kv.key;
+        resp.size = kv.size;
+        resp.listsize = e.listsize();
+        resp.id = query.id;
+      }
+    }
     return resp;
   }
 
@@ -256,17 +311,75 @@ TEST(SortedListsTest, Basic) {
       using namespace sc_core;
 
       top_.t_apply_reset();
+
+      // Spawn global thread to consume outbound notifies.
+      //
+      auto ph0{
+        sc_spawn(std::bind(&SortedListsTask::t_consume_notifies, this),
+                 "t_consume_notifies")};
+      // Spawn global thread to consume query respones.
+      //
+      auto ph1{
+        sc_spawn(std::bind(&SortedListsTask::t_consume_query_responses, this),
+                 "t_consume_query_responses")};
+      // Spawn global thread to consume update responses.
+      //
+      auto ph2{
+        sc_spawn(std::bind(&SortedListsTask::t_consume_update_responses, this),
+                 "t_consumes_update_responses")};
       
-      sc_process_handle h_update = 
-          sc_spawn(std::bind(&SortedListsTask::t_update, this), "t_update");
-      sc_process_handle h_query = 
-          sc_spawn(std::bind(&SortedListsTask::t_query, this), "t_query");
+
+      // Perform N update, query rounds where the active set of ID are
+      // continuously swapped as per spec. requirements.
+      //
+      tb::Random::UniformRandomInterval<word_type> dly{63};
+      for (std::size_t round = 0; round < 16; round++) {
+        std::vector<::sc_core::sc_process_handle> ph;
+
+        // Compute the update set.
+        //
+        std::vector<word_type> ids_update;
+        for (std::size_t i = 0; i < 8; i++)
+          ids_update.push_back(dly());
+
+        // Spawn thread to drive updates
+        //
+        ph.push_back(sc_spawn(std::bind(&SortedListsTask::t_update, this, ids_update),
+                              "t_update"));
+
+        // Compute the active set (disjoint from active set).
+        //
+        std::vector<word_type> ids_active;
+        while (ids_active.size() != 24) {
+          const word_type id{dly()};
+          if (std::find(ids_active.begin(), ids_active.end(), id) != ids_active.end())
+            ids_active.push_back(id);
+        }
+
+        // Spawn thread to drive queries.
+        //
+        ph.push_back(sc_spawn(std::bind(&SortedListsTask::t_query, this, ids_active),
+                              "t_query"));
+
+        // Join on threads before proceeding to next round.
+        //
+        t_join_handles(ph);
+      }
     }
    private:
-    void t_update() {
+    void t_consume_notifies() {
     }
-    void t_query() {
+    void t_consume_query_responses() {
     }
+    void t_consume_update_responses() {
+    }
+    void t_update(const std::vector<word_type> & ids) {
+    }
+    void t_query(const std::vector<word_type> & ids) {
+    }
+    std::deque<Notify> notifies_;
+    std::deque<QueryResponse> query_responses_;
+    std::deque<UpdateResponse> update_respones_;
     MachineModel m_;
     TOP & top_;
   };
