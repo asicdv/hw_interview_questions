@@ -25,4 +25,11 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-emit_answer(tb_sorted_lists sorted_lists.sv sorted_lists.cpp)
+emit_solution(
+  TARGET
+  tb_sorted_lists
+  VTOP
+  sorted_lists.sv
+  TB
+  sorted_lists.cpp
+  )

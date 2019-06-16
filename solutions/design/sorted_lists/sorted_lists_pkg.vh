@@ -1,6 +1,3 @@
-`ifndef SORTED_LISTS_PKG_VH
-`define SORTED_LISTS_PKG_VH
-
 //========================================================================== //
 // Copyright (c) 2017, Stephen Henry
 // All rights reserved.
@@ -27,6 +24,9 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
+
+`ifndef SORTED_LISTS_PKG_VH
+`define SORTED_LISTS_PKG_VH
 
 package sorted_lists_pkg;
 

@@ -242,7 +242,7 @@ TEST(FifoNTest, Basic) {
   };
   
   auto task = std::make_unique<FifoNTask>(top);
-    tb::Random::UniformRandomInterval<word_type> rnd_vq{7,0}, rnd_data{};
+  tb::Random::UniformRandomInterval<word_type> rnd_vq{7,0}, rnd_data{};
   for (std::size_t i = 0; i < n; i++)
     task->add_stimulus(Stimulus{rnd_vq(), rnd_data()});
   TaskRunner.set_task(std::move(task));

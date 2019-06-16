@@ -271,7 +271,7 @@ TEST(MemTest, Basic) {
     TOP & top_;
   };
   
-  auto task = std::make_unique<MemTask>(top);
+p  auto task = std::make_unique<MemTask>(top);
 
   tb::Random::UniformRandomInterval<word_type> data{};
   for (std::size_t wr = 0; wr < 3; wr++) {

@@ -26,4 +26,3 @@
 ##========================================================================== //
 
 add_subdirectory(sorted_lists)
-add_subdirectory(rmw_long_latency)
