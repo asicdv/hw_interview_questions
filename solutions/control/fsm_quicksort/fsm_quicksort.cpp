@@ -212,12 +212,49 @@ tb::TaskRunner TaskRunner;
 
 } // namespace
 
+struct KnownSequence {
+  KnownSequence(std::initializer_list<word_type> il)
+    : unsorted_(il), sorted_(il) { std::sort(sorted_.begin(), sorted_.end()); }
+  bool get_stimulus(Stimulus & s) {
+    if (stim_i_ >= unsorted_.size())
+      return false;
+    const bool sop{stim_i_ == 0};
+    const bool eop{stim_i_ == (unsorted_.size() - 1)};
+    s = Stimulus{sop, eop, unsorted_[stim_i_]};
+    ++stim_i_;
+    return true;
+  }
+  bool get_expected(Expect & x) {
+    if (expect_i_ >= sorted_.size())
+      return false;
+    const bool sop{expect_i_ == 0};
+    const bool eop{expect_i_ == (sorted_.size() - 1)};
+    x = Expect{sop, eop, sorted_[expect_i_]};
+    ++expect_i_;
+    return true;
+  }
+private:
+  std::size_t stim_i_{0}, expect_i_{0};
+  std::vector<word_type> unsorted_, sorted_;
+};
+
 TEST(FSMQuicksortTest, Basic) {
   const std::size_t n{1024 << 3};
   auto task = std::make_unique<
     tb::BasicPassValidNotBusyTask<TOP> >(top);
 
-  for (std::size_t i = 0; i < n; i++) {
+  /*
+  KnownSequence gen{126, 84, 95, 38, 35, 57, 101, 28, 13, 9, 57, 60, 116, 12, 37, 115};
+
+  Stimulus stim;
+  while (gen.get_stimulus(stim))
+    task->add_stimulus(stim);
+
+  Expect x;
+  while (gen.get_expected(x))
+    task->add_expected(x);
+  */
+  for (std::size_t i = 0; i < 2; i++) {
     StimulusGenerator gen{16};
 
     Stimulus stim;

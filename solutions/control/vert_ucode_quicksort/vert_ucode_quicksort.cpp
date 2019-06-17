@@ -806,7 +806,7 @@ TEST(VertUcodeQuicksortTest, Basic) {
   auto task = std::make_unique<
     tb::BasicPassValidNotBusyTask<TOP> >(top);
 
-  for (std::size_t i = 0; i < n; i++) {
+  for (std::size_t i = 0; i < 2; i++) {
     StimulusGenerator gen{16};
 
     Stimulus stim;
