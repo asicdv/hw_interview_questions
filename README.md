@@ -1,20 +1,28 @@
-# Hardware Interview Questions
+c# Hardware Interview Questions
 
 ## Introduction
 
-This repository contains a collection of commonly asked VLSI/RTL
-interview questions. Solutions are presented as fully synthesizable
-System Verilog along with fully self-checking SystemC/SCV
-verification environments.
+The original object of this project was to collate solutions to the
+standard hardware/computer engineering interview questions one may be
+asked for a logic design position. Over the years, the collection of
+solutions has grown from a relatively small collection of puzzles, to
+a number of design examples that demonstrate commonly occuring idioms
+that one may encounter in a wider setting not necessary during an
+interview. In particular, the project has become a holding location
+for small hardware designs that are not necessary large enough to
+warrant an independent piece of work but are nonetheless interesting
+for what they demonstrate.
 
-Important reminder: these are not necessarily questions I myself ask,
-or may have been asked in the past, and any mention of any company
-names is purely speculative.
+All solutions in this work are implemented in standard System Verilog
+and are compiled into SystemC models using Verilator. A C++ based
+verification environment is present along with each solution to
+demonstrate its correctness. All testbenches are integrated into the
+Google Test unit test library and a full regression suite is available
+through CTEST.
 
 ## System Requirements
 * cmake >= 3.2
-* systemc >= 2.3.1
-* scv >= 2.0
+* systemc >= 2.3.1 (built for C++14)
 * verilator >= 3.9
 
 ## Build Steps (SIM)
@@ -28,116 +36,19 @@ cmake ../
 make -j
 ~~~~
 
-## Test Steps
-From the build directory, a full regression can be run using:
+## Regression
 ~~~~
 ctest .
 ~~~~
 
-## PD (VIVADO)
+## Notable Solutions
 
-A standard Vivado flow is supported for each answer. PD libaries must
-be explicitly selected during configuration (below). Within each answer,
-a new target 'vivado' is present that invokes a standard Vivado flow.
+Although the majority of the design solutions are fairly
+self-explanatory, there are a few that are notable for as a point of
+interest.
 
-~~~~
-cmake ../ -DTARGET_VIVADO
-make vivado
-~~~~
+* ___solution/control/vert_ucode_quicksort__
 
-## Discussion
+* ___solution/pipeline/precompute___
 
-The solutions presents herein are commonly seen questions during
-hardware/RTL interviews. They are generally poised to test a
-candidates knowledge of design, logic and RTL. Admittedly, some
-questions are somewhat arbitrary rely upon lesser known tricks of the
-trade that, although useful in the context of an intervew, are perhaps
-irrelevant for day-to-day roles.
-
-## Problems
-
-### Design
-
-* sorted_lists
-* vending_machine_fsm
-* vending_machine_dp
-
-### General Logic
-
-* one_or_two
-* multi_counter
-* multi_counter_variants
-* count_ones
-* detect_sequence
-* missing_duplicated_word
-* zero_indices_slow
-* zero_indices_fast
-* count_zeros_32
-* fibonacci
-
-### Arithmetic
-
-* increment
-* multiply_by_21
-* ultra_wide_accumulator
-* fused_multiply_add
-* simd
-* div_by_3
-* multiplier
-
-### Clocking
-
-* mcp_formulation
-* clk_div_by_3
-
-### General Problem Solving
-
-* latency
-* using_full_adders
-* gates_from_MUX2X1
-
-### Queues
-
-* fifo_async
-* fifo_multi_push
-* fifo_n
-* fifo_sr
-* fifo_ptr
-* linked_list_fifo
-* doubly_linked_list
-* rob
-
-## Noteworthy mentions
-
-### sorted_lists
-
-The 'sorted_lists' solution presents an implementation of a fairly
-complex design problem: A machine maintains N contexts, each context
-contains an ordered list of key/value pairs. On alternating cycles,
-key/value pairs can be added, removed, deleted, changed. At the same
-time, any list can be queried to find the n'th largest element in the
-context, at a rate of upto 1 query per cycle. Additionally, any
-solution must run at around 200 MHz on an FPGA.
-
-### linked_list_fifo
-
-An implementation of a N-context singly, linked list FIFO.
-
-### fifo_async
-
-An implementation of a standard asynchronous FIFO. This in particular
-is a very common interview question and, although very common in
-industry, presents a number of very small, fine details that very
-often go unnoted.
-
-### Single-Instruction, Multiple-Data (SIMD)
-
-An implementation of a Single-Instruction, Multiple-Data ALU. This is
-quite straight-forward conceptually, however there are a few
-interesting details/tricks that can be applied to facilitate an
-efficient and fast implementation in silicon.
-
-## Re-Order Buffer (ROB)
-
-An implementation of a standard reorder buffer with additional memory
-to retain allocation and completion state.
+* ___solution/design/sorted_lists___
