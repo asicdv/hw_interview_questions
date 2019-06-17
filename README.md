@@ -20,7 +20,7 @@ demonstrate its correctness. All testbenches are integrated into the
 Google Test unit test library and a full regression suite is available
 through CTEST.
 
-__DISCLAIMER:___ *This work is not necessary fit for any particular
+__DISCLAIMER:__ *This work is not necessary fit for any particular
 purpose and is really only useful from a pedagogical perspective. In
 addition, I have really just used it for the purpose of joting down
 ideas that explore particular scenarios in logic design.*
@@ -138,10 +138,10 @@ have only partial forwarding to achieve timing).
 * ___solution/arithmetic/simd___
 
 SIMD is a common technique seen in most CPU. Implemented naively
-however one would assume that consisted of simple duplicating multiple
-smaller ALU and driving each depending on the desired operating
-mode. This is not the case. Instead, in SIMD, a single ALU is
-partitioned such that the carries are conditionally killed between
+however one would assume that it consisted of simply duplicating
+multiple smaller ALU and driving each depending on the desired
+operating mode. This is not the case. Instead, in SIMD, a single ALU
+is partitioned such that the carrys are conditionally killed between
 lanes. Although this is slight more complicated, and somewhat
 non-obvious, it results in a faster and smaller design, as a single
 CLA can be used whereas in the multiple ALU case, the carry-chain
