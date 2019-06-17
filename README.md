@@ -146,4 +146,3 @@ lanes. Although this is slight more complicated, and somewhat
 non-obvious, it results in a faster and smaller design, as a single
 CLA can be used whereas in the multiple ALU case, the carry-chain
 would be broken each time a new ALU is used.
-

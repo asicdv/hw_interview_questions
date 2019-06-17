@@ -25,6 +25,9 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
+`ifndef __FSM_QUICKSORT_PKG_VH__
+`define __FSM_QUICKSORT_PKG_VH__
+
 package fsm_quicksort_pkg;
 
   localparam int N = 16;
@@ -113,3 +116,4 @@ package fsm_quicksort_pkg;
 
 endpackage // fsm_quicksort_pkg
   
+`endif //  `ifndef __FSM_QUICKSORT_PKG_VH__
