@@ -20,6 +20,11 @@ demonstrate its correctness. All testbenches are integrated into the
 Google Test unit test library and a full regression suite is available
 through CTEST.
 
+__DISCLAIMER:___ *This work is not necessary fit for any particular
+purpose and is really only useful from a pedagogical perspective. In
+addition, I have really just used it for the purpose of joting down
+ideas that explore particular scenarios in logic design.*
+
 ## System Requirements
 * cmake >= 3.2
 * systemc >= 2.3.1 (built for C++14)
