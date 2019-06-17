@@ -85,6 +85,23 @@ Test project /home/stephenry/github.com/hw_interview_questions/b
 
 ```
 
+## Ancillary utilities
+
+* __libv__
+
+A collection of reusable logic primitives that are used throughout the
+solutions (memories, encoders, queues). All of these components are
+fairly self-explanatory and robust (although still not targeted
+towards production use).
+
+* __libtb__
+
+A collection of reusable C++14 routines (integrated with SystemC)
+which form the basis of the testbenches/verification environments of
+each of the solutions presented. Overall this is fairly small and
+non-intended for general use (as it is tangential to the overall
+objective of the work).
+
 ## Notable Solutions
 
 Although the majority of the design solutions are fairly
