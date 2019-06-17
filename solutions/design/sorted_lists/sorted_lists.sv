@@ -359,15 +359,15 @@ module sorted_lists
       //
       ntf_vld_w   =    upt_pipe_vld_r [3]
                     & (    (ucode_upt_3_r.u.op == OP_CLEAR)
-                        || (   (ucode_upt_3_t_popcnt == 'b1)
+                        || (   (ucode_upt_3_t_popcnt == 'b0)
                              & (ucode_upt_3_r.u.op == OP_DELETE)
                              & (~ucode_upt_3_r.error)
                            )
                       )
                   ;
       ntf_id_w    = ucode_upt_3_r.u.id;
-      ntf_key_w   = ucode_upt_3_r.t.e [ucode_upt_3_hit_e_r].key;
-      ntf_size_w  = ucode_upt_3_r.t.e [ucode_upt_3_hit_e_r].size;
+      ntf_key_w   = ucode_upt_3_r.u.key;
+      ntf_size_w  = ucode_upt_3_r.u.size;
 
     end // block: ntf_PROC
 
@@ -483,12 +483,18 @@ module sorted_lists
           ? ucode_qry_X_sorted_r.e[i] : '0;
 
       //
-      qry_resp_vld_w       = qry_delay_pipe_out_r.vld;
-      qry_key_w            = ucode_qry_X_entry.key;
-      qry_size_w           = ucode_qry_X_entry.size;
-      qry_error_w          = (~ucode_qry_X_entry.vld);
-      qry_listsize_w       = listsize_t'(ucode_qry_X_valid_popcnt);
-      qry_id_w             = qry_delay_pipe_out_r.id;
+      qry_resp_vld_w  = qry_delay_pipe_out_r.vld;
+      qry_id_w        = qry_delay_pipe_out_r.id;
+      qry_error_w     = (~ucode_qry_X_entry.vld);
+      if (qry_resp_vld_w && !qry_error_w) begin
+        qry_key_w       = ucode_qry_X_entry.key;
+        qry_size_w      = ucode_qry_X_entry.size;
+        qry_listsize_w  = listsize_t'(ucode_qry_X_valid_popcnt);
+      end else begin
+        qry_key_w       = '0;
+        qry_size_w      = '0;
+        qry_listsize_w  = '0;
+      end
 
     end // block: qry_pipe_PROC
 

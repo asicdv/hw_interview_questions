@@ -100,6 +100,7 @@ struct Random {
     explicit Bag() {};
     template<typename FwdIt>
     Bag(FwdIt begin, FwdIt end) { add(begin, end); }
+    Bag(std::initializer_list<T> il) { add(il.begin(), il.end()); }
     void add(const T & t, std::size_t weight = 1, bool do_finalize = true) {
       while (weight--)
         v_.push_back(t);
@@ -119,6 +120,13 @@ struct Random {
     UniformRandomInterval<std::size_t> r_;
     std::vector<T> v_;
   };
+
+  static bool Bool(std::size_t t_weight = 1, std::size_t f_weight = 1) {
+    Bag<bool> bg_;
+    bg_.add(true, t_weight);
+    bg_.add(false, f_weight);
+    return bg_();
+  }
 
   // Function to shuffle some sequence of values pointed by two Random
   // Access Iterators.
