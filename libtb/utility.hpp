@@ -34,6 +34,9 @@ template<typename T>
 constexpr std::size_t bits() { return 8 * sizeof(T); }
 
 template<typename T>
+constexpr T mask(std::size_t n) { return (static_cast<T>(1) << n) - 1; }
+
+template<typename T>
 constexpr bool bit(const T & t, std::size_t i) { return (t >> i) & 0x1; }
 
 template<typename T>
@@ -48,6 +51,18 @@ std::size_t pop_count(T t) {
     t >>= 1;
   }
   return cnt;
+}
+
+template<typename T>
+T clear_range(T t, std::size_t lsb, std::size_t msb) {
+  return t & (~mask<T>(msb - lsb + 1) << lsb);
+}
+  
+template<typename T, typename U>
+T set_range_bits(T v, U f, std::size_t lsb, std::size_t bits) {
+  T out{clear_range(v, lsb, lsb + bits - 1)};
+  out |= (static_cast<T>(f) & mask<T>(bits)) << lsb;
+  return out;
 }
 
 } // namespace

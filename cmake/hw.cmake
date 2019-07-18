@@ -31,10 +31,10 @@ macro (build_verilator)
   set(CMAKE_CXX_STANDARD 14)
   set(Verilator_SRCS
     ${Verilator_INCLUDE_DIR}/verilated.cpp
-    ${Verilator_INCLUDE_DIR}/verilated_vcd_c.cpp
     ${Verilator_INCLUDE_DIR}/verilated_dpi.cpp
     ${Verilator_INCLUDE_DIR}/verilated_save.cpp
     ${Verilator_INCLUDE_DIR}/verilated_vcd_sc.cpp
+    ${Verilator_INCLUDE_DIR}/verilated_vcd_c.cpp
     )
   set(Verilator_INCLUDE_DIR
     ${Verilator_INCLUDE_DIR}
@@ -108,6 +108,8 @@ macro (emit_solution)
     add_verilator_option("--trace")
     add_verilator_option("--trace-structs")
   endif ()
+  add_verilator_option("-Wno-lint")
+  add_verilator_option("-Wno-style")
 
   get_filename_component(solution ${PARSED_ARGS_VTOP} NAME_WE)
 

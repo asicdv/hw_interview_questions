@@ -32,28 +32,19 @@ set(LOCAL_ROOT /Users/stephenry/r/)
 
 find_path(Verilator_INCLUDE_DIR verilated.h
   PATH_SUFFIXES include
-  HINTS /usr/local/share/verilator
-  HINTS /usr/share/verilator
-  HINTS /usr/share
-  HINTS ${LOCAL_ROOT}/share/verilator/include
-  HINTS /home/stephenry/r/share/verilator/include
+  HINTS /tools/verilator/latest/
   DOC "Searching for Verilator installation."
   )
 
 find_path(VerilatorDpi_INCLUDE_DIR svdpi.h
   PATH_SUFFIXES include
-  HINTS /usr/local/share/verilator/include/vltstd
-  HINTS /usr/share/verilator/include/vltstd
-  HINTS ${LOCAL_ROOT}share/verilator/include/vltstd/
-  HINTS /home/stephenry/r/share/verilator/include/vltstd
+  HINTS /tools/verilator/latest/include/vltstd
   DOC "Searching for Verilator installation."
   )
 
 find_program(Verilator_EXE
   verilator
-  HINTS /usr/local/bin
-  HINTS ${LOCAL_ROOT}bin
-  HINTS /home/stephenry/r/bin/
+  HINTS /tools/verilator/latest/bin
   DOC "Searching for Verilator executable."
   )
 
