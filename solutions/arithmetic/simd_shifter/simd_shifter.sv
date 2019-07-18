@@ -62,7 +62,6 @@ module simd_shifter (
   //
   always_comb begin : shifter_PROC
 
-
     // Round 6
     word_rnd_6  = in;
 
