@@ -163,19 +163,19 @@ TEST(SimdShifterTb, Basic) {
       tb::Random::UniformRandomInterval<uint32_t> rnd_shift(7, 0);
       uint32_t shift = 0;
       for (std::size_t i = 0; i < 8; i++)
-        tb::set_range_bits(shift, rnd_shift(), i * 4, 4);
+        tb::set_range_bits(shift, rnd_shift(), i * 6, 6);
     } break;
     case M2B: {
       tb::Random::UniformRandomInterval<uint32_t> rnd_shift(15, 0);
       uint32_t shift = 0;
       for (std::size_t i = 0; i < 4; i++)
-        tb::set_range_bits(shift, rnd_shift(), i * 4, 4);
+        tb::set_range_bits(shift, rnd_shift(), i * 6, 6);
     } break;
     case M4B: {
       tb::Random::UniformRandomInterval<uint32_t> rnd_shift(31, 0);
       uint32_t shift = 0;
       for (std::size_t i = 0; i < 2; i++)
-        tb::set_range_bits(shift, rnd_shift(), i * 4, 4);
+        tb::set_range_bits(shift, rnd_shift(), i * 6, 6);
     } break;
     case M8B: {
       tb::Random::UniformRandomInterval<uint32_t> rnd_shift(63, 0);
