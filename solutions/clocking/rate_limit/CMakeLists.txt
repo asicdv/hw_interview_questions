@@ -1,5 +1,5 @@
 ##========================================================================== //
-## Copyright (c) 2016-2018, Stephen Henry
+## Copyright (c) 2016, Stephen Henry
 ## All rights reserved.
 ##
 ## Redistribution and use in source and binary forms, with or without
@@ -25,7 +25,12 @@
 ## POSSIBILITY OF SUCH DAMAGE.
 ##========================================================================== //
 
-add_subdirectory(async_queue)
-add_subdirectory(clk_div_by_3)
-add_subdirectory(mcp_formulation)
-add_subdirectory(rate_limit)
+emit_solution(
+  TARGET
+  tb_rate_limit
+  VTOP
+  rate_limit.sv
+  TB
+  rate_limit.cpp
+  )
+

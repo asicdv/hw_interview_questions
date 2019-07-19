@@ -28,7 +28,7 @@
 // OF THE POSSIBILITY OF SUCH DAMAGE.
 // ==================================================================== //
 
-`include "libtb2.vh"
+`include "libv_pkg.vh"
 
 module fifo_basic #(
      parameter integer W = 32
@@ -74,13 +74,6 @@ module fifo_basic #(
    , output logic                            empty_r
    , output logic                            full_r
 );
-  // Validate parameterizations.
-  `libtb2_static_assert(libtb2_pkg::is_power_of_2(N))
-
-  // Validate input/output contract.
-  `libtb2_assert({empty_r, full_r} != '1)
-  `libtb2_assert(!(push & full_r))
-  `libtb2_assert(!(pop & empty_r))
 
   // ======================================================================== //
   //                                                                          //

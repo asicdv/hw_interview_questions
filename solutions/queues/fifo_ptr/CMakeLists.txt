@@ -33,4 +33,3 @@ emit_solution(
   TB
   fifo_ptr.cpp
   )
-

@@ -25,8 +25,6 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //========================================================================== //
 
-`include "libtb2.vh"
-
 module fifo_async #(
      parameter integer W = 32
    , parameter integer N = 16
@@ -74,11 +72,6 @@ module fifo_async #(
    , output logic                            empty_r
    , output logic                            full_r
 );
-`include "libtb2_bdy.vh"
-
-  `libtb2_static_assert(libtb2_pkg::is_power_of_2(N));
-  `libtb2_assert_clk(wclk, push & (~full_r));
-  `libtb2_assert_clk(rclk, pop & (~empty_r));
 
   typedef struct packed {
     logic                 x;

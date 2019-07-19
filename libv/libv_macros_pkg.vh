@@ -1,5 +1,5 @@
 // ==================================================================== //
-// Copyright (c) 2017, Stephen Henry
+// Copyright (c) 2019, Stephen Henry
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -28,14 +28,32 @@
 // OF THE POSSIBILITY OF SUCH DAMAGE.
 // ==================================================================== //
 
-`ifndef __LIBV_PKG_VH__
-`define __LIBV_PKG_VH__
+`ifndef __LIBV_MACROS_PKG_VH__
+`define __LIBV_MACROS_PKG_VH__
 
-package libv_pkg;
-`include "libv_macros_pkg.vh"
-`include "arithmetic/arithmetic_pkg.vh"
-`include "memory/spsram_pkg.vh"
-`include "memory/dpsram_pkg.vh"
-endpackage // libv_pkg
+`define REG(__type, __name)\
+  __type __name``_r;\
+  __type __name``_w;\
+  always_ff @(posedge clk) \
+    __name``_r <= __name``_w
+
+`define REG_EN(__type, __name)\
+  __type __name``_r;\
+  __type __name``_w;\
+  logic  __name``_en;\
+  always_ff @(posedge clk) \
+    if (__name``_en)\
+      __name``_r <= __name``_w
+
+`define REG_EN_RST(__type, __name, __reset = 'b0)\
+  __type __name``_r;\
+  __type __name``_w;\
+  logic  __name``_en;\
+  always_ff @(posedge clk) \
+    if (rst)\
+     __name``_r <= __type'(__reset);\
+    else\
+      if (__name``_en)\
+        __name``_r <= __name``_w
 
 `endif
