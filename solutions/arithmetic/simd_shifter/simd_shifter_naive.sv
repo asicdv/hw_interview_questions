@@ -32,7 +32,7 @@ module simd_shifter_naive (
     input simd_shifter_pkg::word_t           in
   , input simd_shifter_pkg::mode_t           mode
   , input simd_shifter_pkg::op_t             op
-  , input simd_shifter_pkg::shift_t [3:0]    shift
+  , input simd_shifter_pkg::shift_t [7:0]    shift
   //
   , output simd_shifter_pkg::word_t          out
 );
@@ -60,12 +60,15 @@ module simd_shifter_naive (
       simd_shifter_pkg::MODE_4B: begin
 
         for (int i = 0; i < 2; i++) begin
-          int shift_idx = (i * 4);
           case (op)
-            simd_shifter_pkg::OP_SLL: out  = (in << shift [shift_idx]);
-            simd_shifter_pkg::OP_SRL: out  = (in >> shift [shift_idx]);
-            simd_shifter_pkg::OP_SLA: out  = (in <<< shift [shift_idx]);
-            simd_shifter_pkg::OP_SRA: out  = (in >>> shift [shift_idx]);
+            simd_shifter_pkg::OP_SLL:
+              out.w32 [i]  = ($signed(in.w32 [i]) << shift [i]);
+            simd_shifter_pkg::OP_SRL:
+              out.w32 [i]  = ($signed(in.w32 [i]) >> shift [i]);
+            simd_shifter_pkg::OP_SLA:
+              out.w32 [i]  = ($signed(in.w32 [i]) <<< shift [i]);
+            simd_shifter_pkg::OP_SRA:
+              out.w32 [i]  = ($signed(in.w32 [i]) >>> shift [i]);
           endcase // case (op)
         end
         
@@ -73,33 +76,32 @@ module simd_shifter_naive (
 
       simd_shifter_pkg::MODE_2B: begin
 
-        for (int i = 0; i < 2; i++) begin
-          int shift_idx = (i * 2);
+        for (int i = 0; i < 4; i++) begin
           case (op)
             simd_shifter_pkg::OP_SLL:
-              out.w16[i]  = (in.w16[i] << shift [shift_idx]);
+              out.w16[i]  = ($signed(in.w16[i]) << shift [i]);
             simd_shifter_pkg::OP_SRL:
-              out.w16[i]  = (in.w16[i] >> shift [shift_idx]);
+              out.w16[i]  = ($signed(in.w16[i]) >> shift [i]);
             simd_shifter_pkg::OP_SLA:
-              out.w16[i]  = (in.w16[i] <<< shift [shift_idx]);
+              out.w16[i]  = ($signed(in.w16[i]) <<< shift [i]);
             simd_shifter_pkg::OP_SRA:
-              out.w16[i]  = (in.w16[i] >>> shift [shift_idx]);
+              out.w16[i]  = ($signed(in.w16[i]) >>> shift [i]);
           endcase
         end
         
       end
 
       simd_shifter_pkg::MODE_1B: begin
-        for (int i = 0; i < 4; i++) begin
+        for (int i = 0; i < 8; i++) begin
           case (op)
             simd_shifter_pkg::OP_SLL:
-              out.w8[i]  = (in.w8[i] << shift [i]);
+              out.w8[i]  = ($signed(in.w8[i]) << shift [i]);
             simd_shifter_pkg::OP_SRL:
-              out.w8[i]  = (in.w8[i] >> shift [i]);
+              out.w8[i]  = ($signed(in.w8[i]) >> shift [i]);
             simd_shifter_pkg::OP_SLA:
-              out.w8[i]  = (in.w8[i] <<< shift [i]);
+              out.w8[i]  = ($signed(in.w8[i]) <<< shift [i]);
             simd_shifter_pkg::OP_SRA:
-              out.w8[i]  = (in.w8[i] >>> shift [i]);
+              out.w8[i]  = ($signed(in.w8[i]) >>> shift [i]);
           endcase
         end
       end

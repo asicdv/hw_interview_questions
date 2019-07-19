@@ -133,14 +133,14 @@ tb::TaskRunner TaskRunner;
 } // namespace
 
 TEST(SimdShifterTb, Basic) {
-  const std::size_t n{1024 << 0};
+  const std::size_t n{1024 << 6};
   auto task = std::make_unique<tb::BasicNotFailTask<TOP> >(top);
 
   tb::Random::Bag<Mode> rnd_mode{};
   rnd_mode.add(Mode::M8B);
-  //  rnd_mode.add(Mode::M4B);
-  //  rnd_mode.add(Mode::M2B);
-  //  rnd_mode.add(Mode::M1B);
+  rnd_mode.add(Mode::M4B);
+  rnd_mode.add(Mode::M2B);
+  rnd_mode.add(Mode::M1B);
   rnd_mode.finalize();
 
   tb::Random::Bag<Op> rnd_op{};
