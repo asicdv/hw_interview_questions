@@ -2,7 +2,7 @@
 
 ## Introduction
 
-The original object of this project was to collate solutions to the
+The original objective of this project was to collate solutions to the
 standard hardware/computer engineering interview questions one may be
 asked for a logic design position. Over the years, the collection of
 solutions has grown from a relatively small collection of puzzles, to
