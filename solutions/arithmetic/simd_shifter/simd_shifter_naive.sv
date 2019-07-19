@@ -47,14 +47,12 @@ module simd_shifter_naive (
     case (mode)
 
       simd_shifter_pkg::MODE_8B: begin
-
         case (op)
           simd_shifter_pkg::OP_SLL: out  = ($signed(in) << shift [0]);
           simd_shifter_pkg::OP_SRL: out  = ($signed(in) >> shift [0]);
           simd_shifter_pkg::OP_SLA: out  = ($signed(in) <<< shift [0]);
           simd_shifter_pkg::OP_SRA: out  = ($signed(in) >>> shift [0]);
         endcase
-        
       end
 
       simd_shifter_pkg::MODE_4B: begin
@@ -71,7 +69,6 @@ module simd_shifter_naive (
               out.w32 [i]  = ($signed(in.w32 [i]) >>> shift [i]);
           endcase // case (op)
         end
-        
       end
 
       simd_shifter_pkg::MODE_2B: begin
@@ -88,7 +85,6 @@ module simd_shifter_naive (
               out.w16[i]  = ($signed(in.w16[i]) >>> shift [i]);
           endcase
         end
-        
       end
 
       simd_shifter_pkg::MODE_1B: begin
