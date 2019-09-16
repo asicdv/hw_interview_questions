@@ -11,7 +11,7 @@ It turns out, non-obviously, that this function actually computes an
 increment-by-1 function on the input vector. It remains up for debate
 whether the advantage that such logic would have over the inference of
 a traditional full-adder. Additionally, the complexity of the
-resultant code obscures the fact that it computes a trivially and
+resultant code obscures the fact that it computes a trivial and
 well-known function. In this case, it would almost always be advisible
 for the logic designer to write a simple increment function and all
 synthesize to infer the most efficient structure at the gate-level.
